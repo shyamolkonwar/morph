@@ -1,0 +1,148 @@
+# **Phase 8: User Uploads & Smart Template Selection**
+
+## **1. The "Smart Filter" Logic**
+
+We categorize our templates into two types based on their "slots":
+
+* **Type A: Avatar-Ready Templates.** Designed with a specific circular or square slot for a headshot/logo (e.g., "The Founder", "The Speaker").
+* **Type B: text/Background Only.** Designed for broad visuals without personal branding (e.g., "The Minimalist", "The Tech").
+
+### **The Constraint Rule**
+
+* **IF** User uploads an image:
+* **Dashboard UI:** Only show *Type A* templates as clickable options. Disable *Type B*.
+* **AI Auto-Mode:** If user skips template selection, the AI is *forced* to pick a *Type A* template.
+
+
+* **IF** User does NOT upload an image:
+* **Dashboard UI:** Show all templates (Type A templates hide their avatar slot automatically or revert to an icon).
+* **AI Auto-Mode:** AI is free to choose best fit.
+
+
+
+---
+
+## **2. User Journey (The Dashboard Flow)**
+
+### **Step 1: The "Asset & Vibe" Config**
+
+Before the prompt box, add a compact "Design Config" bar.
+
+**A. "Your Photo" (Upload Button)**
+
+* **Action:** User uploads a file.
+* **Backend:** Upload to Supabase Storage (`bucket: user-uploads`).
+* **State:** The app receives a public URL (e.g., `supabase.co/.../me.jpg`).
+* **Visual Feedback:** Show a tiny thumbnail of their face next to the upload button to confirm.
+
+**B. "Choose Layout" (Optional Dropdown)**
+
+* **Default State:** "Auto (Let AI Decide)".
+* **User Action:** User clicks "Browse Templates."
+* **Modal Opens:** Shows grid of previews.
+* **Filtering:** If they already uploaded a photo in Step A, the modal *grays out* templates that don't have image slots, with a tooltip: *"This template doesn't support profile pictures."*
+
+### **Step 2: The Prompt**
+
+* User types: "LinkedIn banner for a Product Manager."
+* User clicks **"Generate"**.
+
+---
+
+## **3. Technical Architecture**
+
+### **A. Supabase Storage**
+
+* **Bucket Name:** `temp-uploads` (or `user-assets`).
+* **Policy:** Enable Public Access (Read-only) so the React component can render the image.
+* **Lifecycle:** Set a "30-day expiry" rule if you want to save space, or keep them if it's a "Pro" feature.
+
+### **B. Template Metadata (The Registry)**
+
+You need a robust way to define your templates in code so the system knows their rules.
+
+**`templates-config.ts`** (Concept)
+
+```typescript
+export const TEMPLATES = [
+  {
+    id: "executive_minimal",
+    name: "The Executive",
+    tags: ["clean", "text-heavy"],
+    has_avatar_slot: false, // CANNOT take user upload
+    has_background_slot: false
+  },
+  {
+    id: "founder_split",
+    name: "The Founder",
+    tags: ["modern", "split-screen"],
+    has_avatar_slot: true, // CAN take user upload
+    has_background_slot: true
+  }
+];
+
+```
+
+### **C. The AI Instruction (System Prompt Update)**
+
+We must tell Gemini about the user's asset status.
+
+**System Prompt Injection:**
+When sending the request to Gemini, you append context to the "User Message":
+
+* *Scenario 1 (User uploaded photo):*
+> "User has uploaded a profile picture. You MUST select a template_id that supports avatars. Map the user's photo to the 'avatar_url' field."
+
+
+* *Scenario 2 (User picked a template):*
+> "User has manually selected the 'founder_split' template. You MUST use 'founder_split' as the template_id. Fit the content to this structure."
+
+
+
+---
+
+## **4. Updated JSON Schema**
+
+The JSON output from the AI now needs a specific field for the user's face.
+
+```json
+{
+  "template_id": "founder_split",
+  "content": {
+    "headline": "Product Management Leader",
+    "subheadline": "Scaling teams from 0 to 1.",
+    "cta": "Link in bio"
+  },
+  "assets": {
+    "user_image_url": "https://supabase.../face.jpg", // AI passes this through if provided
+    "show_user_image": true,
+    "search_keywords": "office tech white", // For the background (Pexels)
+    "fallback_prompt": "..."
+  }
+}
+
+```
+
+---
+
+## **5. Handling "No Upload" on Avatar Templates**
+
+What if a user chooses "The Founder" template (which has a face circle) but *doesn't* upload a photo?
+
+* **Logic:** The React Component must handle the `null` state.
+* **Fallback UI:**
+* **Option A:** Collapse the slot (Layout shifts to fill space).
+* **Option B:** Show a generic "Initials" avatar (e.g., a circle with the user's initials "JD").
+* **Option C:** Show a high-quality icon related to the niche (e.g., a "Rocket" icon for startups), selected by the AI.
+
+
+
+---
+
+## **6. Summary Checklist**
+
+1. **Storage:** Create Supabase bucket for user uploads.
+2. **Code:** Create a `templates-registry` file that lists which templates support avatars.
+3. **UI:** Add "Upload Image" button to the Dashboard.
+4. **Logic:** Add a filter to the Template Picker: `if (userImage) filter(t => t.has_avatar_slot)`.
+5. **Prompt:** Update System Prompt to handle `FORCE_TEMPLATE_ID` and `HAS_USER_IMAGE` variables.

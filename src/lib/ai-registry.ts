@@ -97,6 +97,12 @@ export const ERROR_MESSAGES = {
         public: "Your account has been suspended. Contact support for assistance.",
     },
 
+    // Missing API Key
+    NO_API_KEY: {
+        internal: "No API key configured",
+        public: "Morph Engine is not configured. Please contact support.",
+    },
+
     // Maintenance
     MAINTENANCE_MODE: {
         internal: "System in maintenance mode",

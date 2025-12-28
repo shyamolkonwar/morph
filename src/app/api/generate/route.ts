@@ -1,25 +1,23 @@
 /**
- * Generation API Route
+ * Generation API Route - Smart Template Engine
  * 
  * POST /api/generate
  * 
- * Full generation pipeline with:
- * - Auth verification
- * - Rate limiting
- * - Credit deduction
- * - Content moderation
- * - AI generation (GPT-4o + Gemini)
- * - Error handling with refunds
+ * Pipeline:
+ * 1. Validate & authenticate
+ * 2. Generate banner config with Morph-1.1 (GPT)
+ * 3. Generate background with Morph-Vision (GPT-image-1 / Pollinations)
+ * 4. Return config + background URL for client-side assembly
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { MORPH_HEADERS, ERROR_MESSAGES, MORPH_ENGINE_VERSION } from "@/lib/ai-registry";
-import { checkSpeedLimit, checkDailyLimit } from "@/lib/rate-limit";
+import { checkSpeedLimit } from "@/lib/rate-limit";
 import { checkCredits, deductCredit, refundCredit, isMaintenanceMode } from "@/lib/credits";
 import { validateRequest, GenerateRequestSchema } from "@/lib/validation";
-import { generateDesignPlan } from "@/lib/services/gpt";
-import { generateBackgroundImage, PLATFORM_SPECS } from "@/lib/services/gemini";
+import { generateBannerConfig } from "@/lib/services/gpt";
+import { generateBackgroundImage } from "@/lib/services/gemini";
 
 export async function POST(request: NextRequest) {
     const startTime = Date.now();
@@ -45,7 +43,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { prompt, platforms } = validation.data;
+        const { prompt } = validation.data;
 
         // Verify authentication
         const supabase = await createClient();
@@ -84,7 +82,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Deduct credit BEFORE generation
-        const deduction = await deductCredit(user.id, `Generated: ${prompt.slice(0, 50)}...`);
+        const deduction = await deductCredit(user.id, `Banner: ${prompt.slice(0, 40)}...`);
         if (!deduction.success) {
             return NextResponse.json(
                 { error: deduction.error },
@@ -92,87 +90,59 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create project record
-        const { data: project, error: projectError } = await supabase
-            .from("projects")
-            .insert({
-                user_id: user.id,
-                title: prompt.slice(0, 50),
-                type: platforms[0],
-                status: "generating",
-            })
-            .select("id")
-            .single();
+        // Step 1: Generate banner config with Morph-1.1
+        const configResult = await generateBannerConfig(prompt);
 
-        if (projectError) {
-            // Refund credit if project creation fails
+        if (!configResult.success || !configResult.config) {
+            // Refund credit on failure
             if (deduction.transactionId) {
-                await refundCredit(user.id, deduction.transactionId, "Project creation failed");
+                await refundCredit(user.id, deduction.transactionId, "Config generation failed");
             }
             return NextResponse.json(
-                { error: "Failed to create project" },
+                { error: configResult.error || ERROR_MESSAGES.GENERATION_FAILED.public },
                 { status: 500, headers: MORPH_HEADERS }
             );
         }
 
-        // Generate design plan with Morph-1.1
-        const designResult = await generateDesignPlan(prompt, platforms[0]);
+        // Step 2: Generate background image using hybrid pipeline (Pexels -> AI fallback)
+        const imageResult = await generateBackgroundImage(configResult.config.assets);
 
-        if (!designResult.success || !designResult.plan) {
-            // Refund credit on generation failure
-            if (deduction.transactionId) {
-                await refundCredit(user.id, deduction.transactionId, "Design generation failed");
-            }
-
-            // Update project status
-            await supabase
-                .from("projects")
-                .update({ status: "failed" })
-                .eq("id", project.id);
-
-            return NextResponse.json(
-                { error: designResult.error || ERROR_MESSAGES.GENERATION_FAILED.public },
-                { status: 500, headers: MORPH_HEADERS }
-            );
-        }
-
-        // Generate background image with Morph-Vision
-        const imageResult = await generateBackgroundImage(
-            designResult.plan.image_prompt,
-            platforms[0] as keyof typeof PLATFORM_SPECS
-        );
-
-        // Store generation result
-        const { data: generation } = await supabase
-            .from("generations")
+        // Create project record (optional, don't fail on error)
+        const { data: project } = await supabase
+            .from("projects")
             .insert({
-                project_id: project.id,
                 user_id: user.id,
-                prompt,
-                copy_json: designResult.plan,
-                image_url: imageResult.imageUrl,
-                layout_id: designResult.plan.layout_id,
-                platform: platforms[0],
-                morph_engine_version: MORPH_ENGINE_VERSION,
-                generation_time_ms: Date.now() - startTime,
+                title: configResult.config.content.headline.slice(0, 50),
+                type: "linkedin_banner",
+                status: "completed",
             })
             .select("id")
             .single();
 
-        // Update project status
-        await supabase
-            .from("projects")
-            .update({ status: "completed" })
-            .eq("id", project.id);
+        // Store generation record
+        await supabase.from("generations").insert({
+            project_id: project?.id,
+            user_id: user.id,
+            prompt,
+            copy_json: configResult.config,
+            image_url: imageResult.imageUrl,
+            layout_id: configResult.config.template_id,
+            platform: "linkedin_banner",
+            morph_engine_version: MORPH_ENGINE_VERSION,
+            generation_time_ms: Date.now() - startTime,
+        });
 
         // Return successful response
         return NextResponse.json(
             {
                 success: true,
-                projectId: project.id,
-                generationId: generation?.id,
-                design: designResult.plan,
-                backgroundImage: imageResult.imageUrl,
+                projectId: project?.id,
+                designPlan: configResult.config,
+                backgroundImage: {
+                    imageUrl: imageResult.imageUrl,
+                    provider: imageResult.provider,
+                    mimeType: imageResult.mimeType,
+                },
                 creditsRemaining: deduction.newBalance,
                 generationTime: Date.now() - startTime,
                 morphVersion: MORPH_ENGINE_VERSION,
@@ -197,6 +167,7 @@ export async function GET() {
             status: "ok",
             version: MORPH_ENGINE_VERSION,
             service: "Morph Generation API",
+            engine: "Smart Template Engine v1",
         },
         { headers: MORPH_HEADERS }
     );

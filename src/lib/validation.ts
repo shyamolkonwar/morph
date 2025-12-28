@@ -19,18 +19,13 @@ export const GenerateRequestSchema = z.object({
             message: "Prompt contains prohibited content",
         }),
 
-    platforms: z
-        .array(
-            z.enum([
-                "linkedin_banner",
-                "linkedin_carousel",
-                "youtube_thumbnail",
-                "instagram_post",
-                "twitter_post",
-            ])
-        )
-        .min(1, "Select at least one platform")
-        .max(5, "Maximum 5 platforms allowed"),
+    platform: z.enum([
+        "linkedin_banner",
+        "linkedin_carousel",
+        "youtube_thumbnail",
+        "instagram_post",
+        "twitter_post",
+    ]),
 
     // Optional settings
     brandKit: z

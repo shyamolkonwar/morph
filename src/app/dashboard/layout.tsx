@@ -149,7 +149,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
 
     return (
-        <div className="min-h-screen bg-morph-bg flex">
+        <div className="h-screen bg-morph-bg flex overflow-hidden">
             {/* Mobile Sidebar Backdrop */}
             {isSidebarOpen && (
                 <div
@@ -160,12 +160,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
             {/* Sidebar */}
             <aside
-                className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-morph-bg-secondary border-r border-morph-border transform transition-transform lg:transform-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+                className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-morph-bg-secondary border-r border-morph-border transform transition-transform lg:transform-none flex-shrink-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
                     }`}
             >
-                <div className="flex flex-col h-full">
-                    {/* Logo */}
-                    <div className="p-6 flex items-center justify-between">
+                <div className="flex flex-col h-full overflow-hidden">
+                    {/* Logo - Fixed */}
+                    <div className="flex-shrink-0 p-6 flex items-center justify-between">
                         <Link href="/" className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-morph-accent to-morph-secondary flex items-center justify-center">
                                 <Sparkles className="w-4 h-4 text-white" />
@@ -182,8 +182,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </button>
                     </div>
 
-                    {/* New Generation Button */}
-                    <div className="px-4 mb-6">
+                    {/* New Generation Button - Fixed */}
+                    <div className="flex-shrink-0 px-4 mb-4">
                         <Link
                             href="/dashboard"
                             className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
@@ -193,28 +193,29 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </Link>
                     </div>
 
-                    {/* Navigation */}
-                    <nav className="flex-1 px-4 space-y-1">
-                        {navItems.map((item) => {
-                            const isActive = pathname === item.href;
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${isActive
+                    {/* Scrollable Content Area */}
+                    <div className="flex-1 overflow-y-auto px-4 pb-4">
+                        {/* Navigation */}
+                        <nav className="space-y-1 mb-4">
+                            {navItems.map((item) => {
+                                const isActive = pathname === item.href;
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${isActive
                                             ? "bg-morph-accent/10 text-morph-accent"
                                             : "text-morph-text-muted hover:text-morph-text hover:bg-morph-bg/50"
-                                        }`}
-                                >
-                                    <item.icon className="w-5 h-5" />
-                                    {item.label}
-                                </Link>
-                            );
-                        })}
-                    </nav>
+                                            }`}
+                                    >
+                                        <item.icon className="w-5 h-5" />
+                                        {item.label}
+                                    </Link>
+                                );
+                            })}
+                        </nav>
 
-                    {/* Credits Card */}
-                    <div className="p-4">
+                        {/* Credits Card */}
                         <div className="glass rounded-xl p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm text-morph-text-muted">Daily Credits</span>
@@ -246,8 +247,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </div>
                     </div>
 
-                    {/* User */}
-                    <div className="p-4 border-t border-morph-border">
+                    {/* User - Fixed at Bottom */}
+                    <div className="flex-shrink-0 p-4 border-t border-morph-border bg-morph-bg-secondary">
                         <div className="flex items-center gap-3">
                             {avatarUrl ? (
                                 <Image
@@ -255,10 +256,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                     alt={displayName}
                                     width={40}
                                     height={40}
-                                    className="w-10 h-10 rounded-full object-cover"
+                                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                                 />
                             ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-morph-accent to-morph-secondary flex items-center justify-center text-white font-bold">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-morph-accent to-morph-secondary flex items-center justify-center text-white font-bold flex-shrink-0">
                                     {displayName.charAt(0).toUpperCase()}
                                 </div>
                             )}
@@ -273,7 +274,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             <button
                                 onClick={handleLogout}
                                 disabled={isLoggingOut}
-                                className="text-morph-text-muted hover:text-morph-text disabled:opacity-50"
+                                className="text-morph-text-muted hover:text-morph-text disabled:opacity-50 flex-shrink-0"
                                 title="Sign out"
                             >
                                 {isLoggingOut ? (
@@ -288,9 +289,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Mobile Header */}
-                <header className="lg:hidden flex items-center justify-between p-4 border-b border-morph-border">
+                <header className="lg:hidden flex-shrink-0 flex items-center justify-between p-4 border-b border-morph-border bg-morph-bg">
                     <button
                         onClick={() => setIsSidebarOpen(true)}
                         className="text-morph-text"
@@ -317,8 +318,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     )}
                 </header>
 
-                {/* Page Content */}
-                <main className="flex-1 overflow-auto">{children}</main>
+                {/* Page Content - Scrollable */}
+                <main className="flex-1 overflow-y-auto">{children}</main>
             </div>
         </div>
     );

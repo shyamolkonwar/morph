@@ -1,0 +1,139 @@
+# **Phase 2: Backend Infrastructure & Security Documentation**
+
+## **1. Rate Limiting Architecture (Upstash + Supabase)**
+
+We will use a **Hybrid Approach**:
+
+* **Upstash Redis:** Handles the high-speed *counting* and blocking (verifying requests in milliseconds).
+* **Supabase Database:** Stores the *rules* (configuration). This allows you to dynamically change limits (e.g., increase limits for a promo event) via your admin dashboard without redeploying code.
+
+### **A. Dynamic Configuration Table (`system_config`)**
+
+Create a table in Supabase to hold global variables.
+
+* `key` (text, PK): e.g., "free_tier_daily_limit"
+* `value` (int): e.g., 10
+* `description` (text): "Number of generations allowed per day for free users."
+
+### **B. The Logic Flow**
+
+1. **Request Inbound:** User hits the `/api/generate` endpoint.
+2. **Fetch Rules:** The app checks the `system_config` table (cached in memory) to know the current limit.
+3. **Check Upstash:** The app pings Upstash Redis: *"Has User X made > 10 requests today?"*
+4. **Decision:**
+* **Pass:** Increment counter in Upstash -> Proceed to AI generation.
+* **Fail:** Return `429 Too Many Requests` error immediately.
+
+
+
+### **C. The Algorithm**
+
+Use the **"Sliding Window"** algorithm. This prevents users from spamming 10 requests at 11:59 PM and another 10 at 12:01 AM. It ensures a smooth distribution of load.
+
+---
+
+## **2. Authentication & User Management**
+
+### **A. Auth Provider (Google Only)**
+
+* **Platform:** Supabase Auth.
+* **Configuration:** Disable Email/Password sign-up. Enable **Google OAuth** provider only.
+* **Flow:**
+1. User clicks "Continue with Google".
+2. Google validates identity.
+3. Supabase creates a `User` in the secure `auth` schema.
+4. Redirects user back to Dashboard.
+
+
+
+### **B. The "User Mirror" Strategy**
+
+Supabase stores auth data in a protected `auth.users` table that you cannot easily modify. You need a public `users` table for your app logic.
+
+**Solution: Postgres Triggers**
+You will set up an automated database trigger:
+
+* **Event:** `AFTER INSERT` on `auth.users`.
+* **Action:** Automatically insert a corresponding row into your `public.users` table.
+* **Data synced:** Email, Full Name, Avatar URL (from Google profile).
+
+### **C. `public.users` Schema**
+
+* `id` (UUID, PK): References `auth.users.id`.
+* `email` (Text, Unique).
+* `full_name` (Text).
+* `avatar_url` (Text).
+* `credits_balance` (Integer, Default: 5). *Gives 5 free credits on signup automatically.*
+* `tier` (Enum): 'free', 'pro'.
+* `created_at` (Timestamp).
+
+---
+
+## **3. The Credit System Architecture**
+
+We need a transactional system to ensure users never lose credits due to glitches.
+
+### **A. Database Approach: "Ledger Style"**
+
+Do not just `update users set credits = credits - 1`. This is prone to errors. Instead, use a **Transaction Log**.
+
+**Table: `credit_transactions**`
+
+* `id` (UUID).
+* `user_id` (FK).
+* `amount` (Integer): -1 for usage, +50 for purchase.
+* `type` (Enum): 'generation', 'purchase', 'signup_bonus', 'refund'.
+* `description` (Text): "Generated LinkedIn Banner".
+* `created_at` (Timestamp).
+
+### **B. The Deduction Logic (Atomic Transaction)**
+
+When a user clicks "Generate":
+
+1. **Database Transaction Start.**
+2. Check if `users.credits_balance` > 0.
+3. Insert row into `credit_transactions` (amount: -1).
+4. Update `users.credits_balance` = `credits_balance` - 1.
+5. **Database Transaction Commit.**
+6. *Only then* call the AI API.
+
+*Note: If the AI generation fails, you run a "Refund" transaction automatically (+1 credit).*
+
+---
+
+## **4. Comprehensive Security Measures**
+
+### **A. Application Level Security**
+
+1. **Input Validation (Zod):** strictly validate every character a user types.
+* *Rule:* No prompt longer than 500 characters.
+* *Rule:* No injection attacks in JSON fields.
+
+
+2. **API Route Protection:** Use Next.js Middleware to verify the Supabase Session Token on *every* API route. If no token, return 401 Unauthorized.
+3. **Strict Content Security Policy (CSP):** Configure headers to only allow scripts and images from your domain, Supabase, and Google.
+
+### **B. Database Level Security (Row Level Security - RLS)**
+
+This is **critical** for Supabase.
+
+* **Rule 1 (Users):** Users can only `SELECT` and `UPDATE` their *own* row in the `users` table.
+* **Rule 2 (Projects):** Users can only see projects where `user_id` matches their ID.
+* **Rule 3 (Credits):** Users *cannot* manually update their `credits_balance`. Only the server-side generic API role (Service Role) can modify credits. This prevents users from "hacking" their credit count via the browser console.
+
+### **C. AI Safety & Abuse Prevention**
+
+1. **Prompt Injection Guard:** Before sending a prompt to GPT-4o, scan it for keywords like "ignore previous instructions" or "system override."
+2. **Content Moderation:**
+* **Text:** Run the user's prompt through OpenAI's "Moderation API" (free) to check for hate speech or violence before generating.
+* **Image:** Use Gemini's built-in safety filters (block explicit content).
+
+
+3. **Cost Cap:** Set a "Hard Limit" on your OpenAI and Google Cloud billing dashboards (e.g., $50/month). If the app goes viral or gets attacked, the APIs will shut off automatically before you go bankrupt.
+
+### **D. Secret Management**
+
+* **Environment Variables:** Store API keys (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE`) in `.env.local` and your deployment platform (Vercel) encrypted storage. Never commit them to GitHub.
+* **Exposure Check:** Ensure `NEXT_PUBLIC_` is ONLY used for the Supabase Anon Key. Never prefix your OpenAI key with `NEXT_PUBLIC_`.
+
+---

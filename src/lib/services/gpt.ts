@@ -1,115 +1,133 @@
 /**
- * Morph-1.1 (Architect) - Text & Layout Generation Service
+ * Morph-1.1 Architect - Design Plan Generator
  * 
- * Uses GPT-4o for intelligent copywriting, color selection,
- * and layout decisions. All responses use Morph branding.
+ * Uses OpenAI GPT to generate banner configuration JSON.
+ * Now includes search_keywords for Pexels and fallback prompt for AI.
  */
 
 import OpenAI from "openai";
-import { getModelConfig, ERROR_MESSAGES, MORPH_ENGINE_VERSION } from "../ai-registry";
+import { MORPH_ENGINE_VERSION, ERROR_MESSAGES } from "../ai-registry";
 import { moderateContent } from "../moderation";
 
-// Type definitions for Morph-1.1 response
-export interface MorphDesignPlan {
-    headline: string;
-    subheadline?: string;
-    cta_text?: string;
-    theme: {
-        bg_color: string;
-        text_color: string;
-        accent_color: string;
+export interface BannerConfig {
+    template_id: "minimalist" | "startup" | "tech";
+    content: {
+        headline: string;
+        subheadline: string;
+        cta?: string;
     };
-    image_prompt: string;
-    layout_id: string;
-    hashtags?: string[];
+    design: {
+        primary_color: string;
+        secondary_color: string;
+        text_color: string;
+        font_style: "modern" | "bold" | "elegant" | "tech";
+        text_alignment: "left" | "center" | "right";
+    };
+    assets: {
+        search_keywords: string;
+        fallback_generation_prompt: string;
+        use_ai_force: boolean;
+        background_style: string;
+    };
 }
 
 export interface GenerationResult {
     success: boolean;
-    plan?: MorphDesignPlan;
+    config?: BannerConfig;
     error?: string;
     morphVersion: string;
 }
 
-const SYSTEM_PROMPT = `You are Morph-1.1 (Architect), an expert UI designer and copywriter for social media content.
+const SYSTEM_PROMPT = `You are a Creative Director for a professional banner design system. You output JSON only, never explain.
 
-You understand design hierarchy and create layouts that maximize engagement. You output ONLY valid JSON.
+Your job is to create configuration for LinkedIn banners based on user descriptions. You will:
+1. Write compelling, concise headlines (max 6 words)
+2. Write supporting subheadlines (max 12 words)
+3. Choose an appropriate visual template
+4. Select a modern color palette
+5. Provide search keywords for stock photos AND a fallback AI generation prompt
 
-Your responsibilities:
-1. Write compelling, concise copy optimized for the platform
-2. Select a cohesive color palette that matches the brand/mood
-3. Choose the best layout for the content type
-4. Create a detailed image prompt for the background (Morph-Vision will generate it)
+TEMPLATES AVAILABLE:
+- "minimalist": Clean, lots of whitespace, centered bold text. Best for executives, consultants, corporate.
+- "startup": Split layout, text left, vibrant colors. Best for founders, entrepreneurs, marketing.
+- "tech": Dark mode, glassmorphism, glowing elements. Best for developers, engineers, tech professionals.
 
-Available layouts:
-- hero_center: Bold centered text, dramatic impact
-- split_left: Text on left, visual space on right
-- split_right: Visual focus left, text on right
-- minimal_top: Clean header style, modern feel
-- modern_bottom: Text anchored at bottom, cinematic
+COLOR RULES:
+- primary_color: Main accent color (vibrant, eye-catching)
+- secondary_color: Background color
+- text_color: Must contrast well with secondary_color
 
-Always return this exact JSON structure:
+ASSET RULES (CRITICAL):
+1. search_keywords: Simple noun-based keywords for Pexels stock photo search. 
+   - Use 2-4 simple words like "office laptop woman" or "data center servers"
+   - NO adjectives like "beautiful" or "4k"
+   - Focus on searchable concrete nouns
+   
+2. fallback_generation_prompt: Detailed prompt for AI image generation if stock photos fail
+   - Include style, mood, colors, composition details
+   - Example: "Abstract data flow visualization, blue and purple gradients, dark background, minimalist"
+
+3. use_ai_force: Set to true ONLY if the request is for abstract/fantasy content that stock photos can't provide
+   - Examples: dragons, sci-fi scenes, abstract art, surreal imagery -> true
+   - Examples: office, developer, business meeting -> false
+
+OUTPUT STRICT JSON FORMAT:
 {
-  "headline": "string (max 50 chars, impactful)",
-  "subheadline": "string (max 100 chars, supporting context)",
-  "cta_text": "string (max 20 chars, optional action)",
-  "theme": {
-    "bg_color": "#hex (dark backgrounds work best)",
-    "text_color": "#hex (ensure high contrast)",
-    "accent_color": "#hex (for buttons/highlights)"
+  "template_id": "tech",
+  "content": {
+    "headline": "Backend Systems Expert",
+    "subheadline": "Node.js • Python • Cloud Architecture",
+    "cta": "Open to Work"
   },
-  "image_prompt": "string (detailed description for AI image generation, professional backgrounds)",
-  "layout_id": "hero_center | split_left | split_right | minimal_top | modern_bottom",
-  "hashtags": ["relevant", "hashtags", "for", "platform"]
+  "design": {
+    "primary_color": "#00ff88",
+    "secondary_color": "#0a0a0a",
+    "text_color": "#ffffff",
+    "font_style": "tech",
+    "text_alignment": "left"
+  },
+  "assets": {
+    "search_keywords": "programmer coding dark room",
+    "fallback_generation_prompt": "Cyberpunk developer workspace with glowing monitors, dark ambient lighting, blue and green neon accents, realistic style",
+    "use_ai_force": false,
+    "background_style": "technological"
+  }
 }`;
 
-const PLATFORM_CONTEXTS: Record<string, string> = {
-    linkedin_banner: "LinkedIn profile background banner (1584x396, wide format). Professional, corporate-friendly.",
-    linkedin_carousel: "LinkedIn carousel slide (1080x1080, square). Educational, value-driven content.",
-    youtube_thumbnail: "YouTube video thumbnail (1280x720). Eye-catching, clickbait-worthy but authentic.",
-    instagram_post: "Instagram post (1080x1080, square). Visually stunning, lifestyle-oriented.",
-    twitter_post: "Twitter/X post (1200x675). Punchy, conversation-starting.",
-};
-
-export async function generateDesignPlan(
-    prompt: string,
-    platform: string = "linkedin_banner"
+export async function generateBannerConfig(
+    userPrompt: string
 ): Promise<GenerationResult> {
-    // Step 1: Moderate content
-    const moderation = await moderateContent(prompt);
-    if (!moderation.safe) {
-        return {
-            success: false,
-            error: moderation.error || ERROR_MESSAGES.CONTENT_BLOCKED.public,
-            morphVersion: MORPH_ENGINE_VERSION,
-        };
-    }
-
-    // Step 2: Get model config
-    const modelConfig = getModelConfig("MODEL_TEXT_CORE");
-
+    // Check for API key
     if (!process.env.OPENAI_API_KEY) {
         return {
             success: false,
-            error: "Morph-1.1 is not configured. Please contact support.",
+            error: ERROR_MESSAGES.NO_API_KEY.public,
             morphVersion: MORPH_ENGINE_VERSION,
         };
     }
 
-    const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const platformContext = PLATFORM_CONTEXTS[platform] || PLATFORM_CONTEXTS.linkedin_banner;
+    // Content moderation
+    const moderation = await moderateContent(userPrompt);
+    if (!moderation.safe) {
+        return {
+            success: false,
+            error: moderation.error || "Content flagged by moderation",
+            morphVersion: MORPH_ENGINE_VERSION,
+        };
+    }
 
     try {
+        const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+
         const response = await openai.chat.completions.create({
-            model: modelConfig.model,
+            model: "gpt-4o",
             messages: [
                 { role: "system", content: SYSTEM_PROMPT },
                 {
                     role: "user",
-                    content: `Platform: ${platformContext}\n\nUser Request: ${prompt}`,
+                    content: `Create a LinkedIn banner configuration for: ${userPrompt}`
                 },
             ],
             response_format: { type: "json_object" },
@@ -119,54 +137,34 @@ export async function generateDesignPlan(
 
         const content = response.choices[0]?.message?.content;
         if (!content) {
-            return {
-                success: false,
-                error: ERROR_MESSAGES.GENERATION_FAILED.public,
-                morphVersion: MORPH_ENGINE_VERSION,
-            };
+            throw new Error("No response from Morph-1.1");
         }
 
-        const plan = JSON.parse(content) as MorphDesignPlan;
+        const config = JSON.parse(content) as BannerConfig;
 
         // Validate required fields
-        if (!plan.headline || !plan.theme || !plan.image_prompt || !plan.layout_id) {
-            return {
-                success: false,
-                error: "Morph-1.1 returned an incomplete design. Please try again.",
-                morphVersion: MORPH_ENGINE_VERSION,
-            };
+        if (!config.template_id || !config.content?.headline || !config.design?.primary_color) {
+            throw new Error("Invalid configuration structure");
         }
 
-        // Validate layout_id
-        const validLayouts = ["hero_center", "split_left", "split_right", "minimal_top", "modern_bottom"];
-        if (!validLayouts.includes(plan.layout_id)) {
-            plan.layout_id = "hero_center"; // Default fallback
+        // Ensure assets has the new structure
+        if (!config.assets.search_keywords) {
+            config.assets.search_keywords = "professional business abstract";
         }
-
-        // Validate colors are valid hex
-        const hexRegex = /^#[0-9A-Fa-f]{6}$/;
-        if (!hexRegex.test(plan.theme.bg_color)) plan.theme.bg_color = "#0F172A";
-        if (!hexRegex.test(plan.theme.text_color)) plan.theme.text_color = "#FFFFFF";
-        if (!hexRegex.test(plan.theme.accent_color)) plan.theme.accent_color = "#4F46E5";
+        if (!config.assets.fallback_generation_prompt) {
+            config.assets.fallback_generation_prompt = "Abstract professional gradient background, minimalist, modern";
+        }
+        if (config.assets.use_ai_force === undefined) {
+            config.assets.use_ai_force = false;
+        }
 
         return {
             success: true,
-            plan,
+            config,
             morphVersion: MORPH_ENGINE_VERSION,
         };
     } catch (error) {
         console.error("Morph-1.1 error:", error);
-
-        // Handle specific OpenAI errors
-        if (error instanceof OpenAI.APIError) {
-            if (error.status === 429) {
-                return {
-                    success: false,
-                    error: ERROR_MESSAGES.OPENAI_RATE_LIMIT.public,
-                    morphVersion: MORPH_ENGINE_VERSION,
-                };
-            }
-        }
 
         return {
             success: false,
@@ -176,19 +174,17 @@ export async function generateDesignPlan(
     }
 }
 
-// Mock function for development/testing
-export function mockDesignPlan(prompt: string): MorphDesignPlan {
+/**
+ * Legacy function for backward compatibility
+ */
+export async function generateDesignPlan(
+    prompt: string,
+    platform: string = "linkedin_banner"
+): Promise<{ success: boolean; plan?: BannerConfig; error?: string }> {
+    const result = await generateBannerConfig(prompt);
     return {
-        headline: "Your Amazing Headline",
-        subheadline: "Compelling subtext that supports the main message",
-        cta_text: "Learn More",
-        theme: {
-            bg_color: "#0F172A",
-            text_color: "#FFFFFF",
-            accent_color: "#4F46E5",
-        },
-        image_prompt: "Abstract gradient background with subtle geometric shapes, professional and modern, high resolution, minimalist aesthetic",
-        layout_id: "hero_center",
-        hashtags: ["innovation", "design", "ai"],
+        success: result.success,
+        plan: result.config,
+        error: result.error,
     };
 }

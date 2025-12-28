@@ -1,0 +1,58 @@
+Phase 7: The Hybrid Asset Pipeline (Pexels + AI Fallback)
+1. The Core Logic
+We no longer default to generating images. We prioritize real photography.
+Primary Source (Tier 1): Pexels API (Real Stock Photos).
+Cost: Free (Requires attribution or API key).
+Speed: Instant.
+Quality: Real humans, real environments.
+Secondary Source (Tier 2 - Fallback): Morph-Vision ("gpt-image-1").
+Cost: Low/Free (depending on your "gpt-image-1" provider).
+Trigger: Used only if Pexels returns zero results OR if the user explicitly requests "Abstract/AI Art."
+2. The Workflow Algorithm
+Step A: Intelligent Analysis (Gemini/Morph-Architect)
+The text AI must now output two distinct visual instructions in the JSON:
+search_keywords: Simple, broad terms for Pexels (e.g., "office", "laptop", "meeting"). AI cannot search Pexels with complex sentences.
+fallback_prompt: A detailed description for the AI generator if Pexels fails (e.g., "Abstract data stream, blue cybernetic flow, high detail").
+Step B: The Search Controller (Frontend Logic)
+Fetch Pexels:
+Query Pexels API with search_keywords.
+Filter: orientation: landscape (for banners).
+Validation Check:
+Did Pexels return at least 1 image?
+YES: Take the top result -> Pass URL to <Banner />.
+NO: Trigger "gpt-image-1" -> Generate image -> Pass URL to <Banner />.
+3. API Integration Guide
+Pexels API (The Primary)
+Auth: Get a free API key from Pexels.
+Endpoint: GET https://api.pexels.com/v1/search?query={keyword}&per_page=1
+Credit/Attribution: Pexels requires you to show the photographer's name.
+UI Tip: Add a tiny "Photo by [Name] on Pexels" text in the corner of the editor UI (doesn't need to be on the final exported banner, but check their terms).
+gpt-image-1 (The Fallback)
+Definition: This is your code name for the AI generator (Pollinations/Flux).
+Usage: Only called when the Pexels array is empty [].
+4. Updated JSON Schema (System Prompt)
+The AI (Gemini) must understand that it is driving a search engine, not just an artist.
+
+JSON
+{
+  "template_id": "modern_split",
+  "content": { ... },
+  "assets": {
+    "search_keywords": "programmer coding dark room",
+    "fallback_generation_prompt": "Cyberpunk developer setup with glowing monitors, neon blue and purple lighting, realistic style",
+    "use_ai_force": false
+  }
+}
+search_keywords: Note how simple these are. No adjectives like "beautiful" or "4k". Just nouns.
+use_ai_force: If the user asks for "A dragon fighting a robot," the AI sets this to true, skipping Pexels entirely (because Pexels won't have that).
+5. Error Handling & Edge Cases
+Problem: User wants "Bitcoin Graph."
+Pexels: Might show a physical coin (Good).
+Fallback: AI makes a glowing crypto chart (Also Good).
+Logic: The system naturally balances itself. Real concepts get real photos; abstract concepts (like "The Future of AI") might fail on Pexels and naturally fall back to your AI generator.
+6. User Interface Changes
+Give the user control over this pipeline in the Editor.
+"Swap Image" Button:
+When clicked, show a modal with two tabs:
+Tab 1: Stock Search (Pexels). Let them type a new keyword to search Pexels manually.
+Tab 2: Generate (AI). Let them type a prompt to use gpt-image-1.
