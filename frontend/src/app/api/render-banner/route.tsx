@@ -155,7 +155,7 @@ function renderTechTemplate(
                     width: "100%",
                     height: "100%",
                     display: "flex",
-                    backgroundImage: `linear-gradient(${primaryColor}15 1px, transparent 1px), linear-gradient(90deg, ${primaryColor}15 1px, transparent 1px)`,
+                    backgroundImage: `linear-gradient(to bottom, rgba(0,255,136,0.08) 1px, transparent 1px), linear-gradient(to right, rgba(0,255,136,0.08) 1px, transparent 1px)`,
                     backgroundSize: "40px 40px",
                 }}
             />
@@ -266,10 +266,9 @@ function renderMinimalistTemplate(
                             fontSize: "14px",
                             fontWeight: 600,
                             padding: "12px 24px",
-                            borderRadius: "999px",
+                            borderRadius: 999,
                             backgroundColor: primaryColor,
                             color: secondaryColor,
-                            width: "fit-content",
                         }}
                     >
                         {cta}
@@ -339,15 +338,14 @@ function renderStartupTemplate(
                     style={{
                         display: "flex",
                         marginBottom: "16px",
-                        fontSize: "11px",
+                        fontSize: 11,
                         fontWeight: 700,
                         textTransform: "uppercase",
                         padding: "8px 16px",
-                        borderRadius: "999px",
-                        backgroundColor: `${primaryColor}30`,
+                        borderRadius: 999,
+                        backgroundColor: `rgba(0,255,136,0.18)`,
                         color: primaryColor,
-                        border: `1px solid ${primaryColor}50`,
-                        width: "fit-content",
+                        border: `1px solid rgba(0,255,136,0.3)`,
                     }}
                 >
                     {cta || "✨ Available Now"}

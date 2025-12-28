@@ -138,10 +138,13 @@ export async function POST(request: NextRequest) {
                 success: true,
                 projectId: project?.id,
                 designPlan: configResult.config,
+                generativeDesign: configResult.generativeDesign, // V2: Component tree
                 backgroundImage: {
                     imageUrl: imageResult.imageUrl,
                     provider: imageResult.provider,
                     mimeType: imageResult.mimeType,
+                    photographer: imageResult.photographer,
+                    photographerUrl: imageResult.photographerUrl,
                 },
                 creditsRemaining: deduction.newBalance,
                 generationTime: Date.now() - startTime,

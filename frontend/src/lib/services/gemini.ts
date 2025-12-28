@@ -22,7 +22,7 @@ export interface ImageResult {
 export interface AssetConfig {
     search_keywords: string;
     fallback_generation_prompt: string;
-    use_ai_force: boolean;
+    use_ai_force?: boolean;
 }
 
 // LinkedIn Banner dimensions

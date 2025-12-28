@@ -16,10 +16,11 @@ import {
     Search,
     Zap,
 } from "lucide-react";
-import BannerTemplate, { type BannerConfig } from "@/components/BannerTemplate";
+import { GenerativeCanvas } from "@/components/LayerRenderer";
+import type { GenerativeDesign } from "@/lib/generative-types";
 
 interface GenerationResult {
-    config: BannerConfig;
+    design: GenerativeDesign;
     backgroundUrl: string;
     projectId?: string;
     photographer?: string;
@@ -31,6 +32,25 @@ interface PexelsPhoto {
     url: string;
     photographer: string;
     photographerUrl: string;
+}
+
+// Extract primary accent color from design layers
+function extractPrimaryColor(layers: GenerativeDesign["layers"]): string {
+    for (const layer of layers) {
+        if (layer.component === "Badge" && layer.props.color) {
+            return layer.props.color as string;
+        }
+        if (layer.component === "ShapeBlob" && layer.props.color) {
+            return layer.props.color as string;
+        }
+        if (layer.component === "AccentLine" && layer.props.color) {
+            return layer.props.color as string;
+        }
+        if (layer.component === "CornerAccent" && layer.props.color) {
+            return layer.props.color as string;
+        }
+    }
+    return "#00ff88";
 }
 
 export default function DashboardPage() {
@@ -78,7 +98,7 @@ export default function DashboardPage() {
             await new Promise((resolve) => setTimeout(resolve, 500));
 
             setResult({
-                config: data.designPlan,
+                design: data.generativeDesign || data.designPlan,
                 backgroundUrl: data.backgroundImage?.imageUrl || "",
                 projectId: data.projectId,
                 photographer: data.backgroundImage?.photographer,
@@ -107,10 +127,10 @@ export default function DashboardPage() {
         if (!result) return;
         setResult({
             ...result,
-            config: {
-                ...result.config,
+            design: {
+                ...result.design,
                 content: {
-                    ...result.config.content,
+                    ...result.design.content,
                     [field]: value,
                 },
             },
@@ -184,39 +204,47 @@ export default function DashboardPage() {
         setError(null);
 
         try {
-            // Use server-side rendering API for reliable image generation
-            const response = await fetch("/api/render-banner", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    template: result.config.template_id,
-                    headline: result.config.content.headline,
-                    subheadline: result.config.content.subheadline,
-                    cta: result.config.content.cta,
-                    primaryColor: result.config.design.primary_color,
-                    secondaryColor: result.config.design.secondary_color,
-                    textColor: result.config.design.text_color,
-                    backgroundUrl: result.backgroundUrl,
-                }),
+            // Use Supabase Edge Function for server-side rendering
+            // Replace with your actual Supabase project URL
+            const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+            const ogEndpoint = `${SUPABASE_URL}/functions/v1/og-generator`;
+
+            // Extract primary color from design layers
+            const primaryColor = extractPrimaryColor(result.design.layers);
+
+            // Build query params for GET request (simpler for browser download)
+            const params = new URLSearchParams({
+                headline: result.design.content.headline,
+                subheadline: result.design.content.subheadline,
+                ...(result.design.content.cta && { cta: result.design.content.cta }),
+                primaryColor: primaryColor,
+                bgColor: result.design.canvas.bg_color,
+                ...(result.backgroundUrl && { bgUrl: result.backgroundUrl }),
+                fontPair: "tech",
             });
+
+            const downloadUrl = `${ogEndpoint}?${params.toString()}`;
+
+            // Fetch the image from Edge Function
+            const response = await fetch(downloadUrl);
 
             if (!response.ok) {
                 throw new Error("Server rendering failed");
             }
 
-            const data = await response.json();
+            // Convert to blob and download
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
 
-            if (!data.success || !data.imageData) {
-                throw new Error("No image data returned");
-            }
-
-            // Download the rendered image
             const link = document.createElement("a");
             link.download = `linkedin-banner-${Date.now()}.png`;
-            link.href = data.imageData;
+            link.href = blobUrl;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+
+            // Clean up blob URL
+            URL.revokeObjectURL(blobUrl);
 
         } catch (err) {
             console.error("Download failed:", err);
@@ -355,13 +383,10 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Banner Preview */}
-                        <div className="glass rounded-2xl overflow-hidden mb-4">
-                            <BannerTemplate
-                                ref={bannerRef}
-                                config={result.config}
-                                backgroundUrl={result.backgroundUrl}
-                                isEditing={isEditing}
-                                onUpdateContent={handleUpdateContent}
+                        <div ref={bannerRef} className="glass rounded-2xl overflow-hidden mb-4">
+                            <GenerativeCanvas
+                                design={result.design}
+                                imageUrl={result.backgroundUrl}
                             />
                         </div>
 
