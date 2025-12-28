@@ -1,26 +1,211 @@
 @import "tailwindcss";
 
+/* Morph Brand Colors */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --morph-bg: #0F172A;
+  --morph-bg-secondary: #1E293B;
+  --morph-accent: #4F46E5;
+  --morph-accent-light: #6366F1;
+  --morph-secondary: #22D3EE;
+  --morph-text: #F8FAFC;
+  --morph-text-muted: #94A3B8;
+  --morph-border: #334155;
+  
+  --background: var(--morph-bg);
+  --foreground: var(--morph-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-morph-bg: var(--morph-bg);
+  --color-morph-bg-secondary: var(--morph-bg-secondary);
+  --color-morph-accent: var(--morph-accent);
+  --color-morph-accent-light: var(--morph-accent-light);
+  --color-morph-secondary: var(--morph-secondary);
+  --color-morph-text: var(--morph-text);
+  --color-morph-text-muted: var(--morph-text-muted);
+  --color-morph-border: var(--morph-border);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--morph-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--morph-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--morph-text-muted);
+}
+
+/* Grid Background Pattern */
+.grid-pattern {
+  background-image: 
+    linear-gradient(rgba(79, 70, 229, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 70, 229, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Animated Gradient Background */
+.gradient-bg {
+  background: linear-gradient(
+    135deg,
+    var(--morph-bg) 0%,
+    #1a1a3e 25%,
+    var(--morph-bg) 50%,
+    #0d1f35 75%,
+    var(--morph-bg) 100%
+  );
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Glow Effects */
+.glow-accent {
+  box-shadow: 0 0 30px rgba(79, 70, 229, 0.4);
+}
+
+.glow-secondary {
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.4);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(79, 70, 229, 0.5);
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(30, 41, 59, 0.5);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.glass-light {
+  background: rgba(248, 250, 252, 0.05);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(248, 250, 252, 0.1);
+}
+
+/* Button Styles */
+.btn-primary {
+  background: linear-gradient(135deg, var(--morph-accent) 0%, var(--morph-accent-light) 100%);
+  color: white;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(79, 70, 229, 0.4);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--morph-text);
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: 1px solid var(--morph-border);
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  border-color: var(--morph-accent);
+  color: var(--morph-accent);
+}
+
+/* Typing Animation */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '|';
+  animation: blink 1s infinite;
+  color: var(--morph-accent);
+}
+
+/* Fade In Animation */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out forwards;
+}
+
+/* Scale Animation */
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.5s ease-out forwards;
+}
+
+/* Pulse Glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(79, 70, 229, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(79, 70, 229, 0.6); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Shimmer Effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--morph-bg-secondary) 0%,
+    var(--morph-border) 50%,
+    var(--morph-bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Float Animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }
