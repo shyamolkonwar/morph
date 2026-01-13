@@ -18,6 +18,13 @@ import {
 } from "lucide-react";
 import { GenerativeCanvas } from "@/components/LayerRenderer";
 import type { GenerativeDesign } from "@/lib/generative-types";
+import type { VerificationReport } from "@/lib/morph-v2-types";
+import {
+    EngineToggle,
+    GenerationStatus,
+    SVGPreview,
+    type GenerationPhase,
+} from "@/components/dashboard";
 
 interface GenerationResult {
     design: GenerativeDesign;
@@ -26,6 +33,14 @@ interface GenerationResult {
     photographer?: string;
     photographerUrl?: string;
     provider?: string;
+}
+
+// MorphV2 result interface
+interface V2Result {
+    svg: string;
+    verificationReport?: VerificationReport;
+    iterations: number;
+    projectId?: string;
 }
 
 interface PexelsPhoto {
@@ -69,53 +84,115 @@ export default function DashboardPage() {
     const [isDownloading, setIsDownloading] = useState(false);
     const bannerRef = useRef<HTMLDivElement>(null);
 
+    // MorphV2 State
+    const [useV2, setUseV2] = useState(true);
+    const [v2Result, setV2Result] = useState<V2Result | null>(null);
+    const [generationPhase, setGenerationPhase] = useState<GenerationPhase>("idle");
+    const [currentIteration, setCurrentIteration] = useState(1);
+
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
 
         setIsGenerating(true);
         setError(null);
         setResult(null);
+        setV2Result(null);
+        setGenerationPhase("idle");
+        setCurrentIteration(1);
 
         try {
-            setGenerationStep("Morph-1.1 is designing your banner...");
+            if (useV2) {
+                // MorphV2 First-Principles Engine
+                setGenerationPhase("designing");
+                setGenerationStep("MorphV2 is designing from first principles...");
 
-            const response = await fetch("/api/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    prompt: prompt.trim(),
-                    platform: "linkedin_banner",
-                }),
-            });
+                const response = await fetch("/api/v2/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        prompt: prompt.trim(),
+                        canvas_width: 1200,
+                        canvas_height: 630,
+                        brand_colors: ["#FF6B35", "#FFFFFF", "#004E89"],
+                        max_iterations: 5,
+                    }),
+                });
 
-            const data = await response.json();
+                const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || "Generation failed");
-            }
+                if (!response.ok) {
+                    if (data.fallback) {
+                        // V2 unavailable, suggest fallback
+                        setError("MorphV2 backend is unavailable. Switch to V1 engine or try again.");
+                        setGenerationPhase("error");
+                        return;
+                    }
+                    throw new Error(data.error || "Generation failed");
+                }
 
-            setGenerationStep("Assembling your banner...");
-            await new Promise((resolve) => setTimeout(resolve, 500));
+                setGenerationPhase("validating");
+                await new Promise((r) => setTimeout(r, 300));
 
-            setResult({
-                design: data.generativeDesign || data.designPlan,
-                backgroundUrl: data.backgroundImage?.imageUrl || "",
-                projectId: data.projectId,
-                photographer: data.backgroundImage?.photographer,
-                photographerUrl: data.backgroundImage?.photographerUrl,
-                provider: data.backgroundImage?.provider,
-            });
+                if (data.iterations > 1) {
+                    setGenerationPhase("refining");
+                    setCurrentIteration(data.iterations);
+                    await new Promise((r) => setTimeout(r, 300));
+                }
 
-            // Set default search query from generated keywords
-            if (data.designPlan?.assets?.search_keywords) {
-                setStockSearchQuery(data.designPlan.assets.search_keywords);
-            }
-            if (data.designPlan?.assets?.fallback_generation_prompt) {
-                setAiPrompt(data.designPlan.assets.fallback_generation_prompt);
+                setGenerationPhase("rendering");
+                await new Promise((r) => setTimeout(r, 300));
+
+                setV2Result({
+                    svg: data.svg,
+                    verificationReport: data.verification_report,
+                    iterations: data.iterations,
+                    projectId: data.projectId,
+                });
+
+                setGenerationPhase("complete");
+            } else {
+                // V1 Template Engine
+                setGenerationStep("Morph-1.1 is designing your banner...");
+
+                const response = await fetch("/api/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        prompt: prompt.trim(),
+                        platform: "linkedin_banner",
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Generation failed");
+                }
+
+                setGenerationStep("Assembling your banner...");
+                await new Promise((resolve) => setTimeout(resolve, 500));
+
+                setResult({
+                    design: data.generativeDesign || data.designPlan,
+                    backgroundUrl: data.backgroundImage?.imageUrl || "",
+                    projectId: data.projectId,
+                    photographer: data.backgroundImage?.photographer,
+                    photographerUrl: data.backgroundImage?.photographerUrl,
+                    provider: data.backgroundImage?.provider,
+                });
+
+                // Set default search query from generated keywords
+                if (data.designPlan?.assets?.search_keywords) {
+                    setStockSearchQuery(data.designPlan.assets.search_keywords);
+                }
+                if (data.designPlan?.assets?.fallback_generation_prompt) {
+                    setAiPrompt(data.designPlan.assets.fallback_generation_prompt);
+                }
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
             setError(errorMessage);
+            setGenerationPhase("error");
             console.error("Generation error:", err);
         } finally {
             setIsGenerating(false);
@@ -268,6 +345,15 @@ export default function DashboardPage() {
 
             {/* Generator Form */}
             <div className="glass rounded-2xl p-6 mb-8">
+                {/* Engine Toggle */}
+                <div className="mb-6">
+                    <EngineToggle
+                        useV2={useV2}
+                        onToggle={setUseV2}
+                        disabled={isGenerating}
+                    />
+                </div>
+
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-morph-text-muted mb-2">
                         Describe yourself or your banner
@@ -313,18 +399,29 @@ export default function DashboardPage() {
                         animate={{ opacity: 1, height: "auto" }}
                         className="mt-6"
                     >
-                        <div className="flex items-center gap-3 mb-2">
-                            <Sparkles className="w-5 h-5 text-morph-secondary animate-pulse" />
-                            <span className="text-sm text-morph-text">{generationStep}</span>
-                        </div>
-                        <div className="h-2 bg-morph-bg rounded-full overflow-hidden">
-                            <motion.div
-                                className="h-full bg-gradient-to-r from-morph-accent to-morph-secondary"
-                                initial={{ width: "0%" }}
-                                animate={{ width: "100%" }}
-                                transition={{ duration: 4, ease: "linear" }}
+                        {useV2 ? (
+                            <GenerationStatus
+                                phase={generationPhase}
+                                iteration={currentIteration}
+                                maxIterations={5}
+                                error={error || undefined}
                             />
-                        </div>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Sparkles className="w-5 h-5 text-morph-secondary animate-pulse" />
+                                    <span className="text-sm text-morph-text">{generationStep}</span>
+                                </div>
+                                <div className="h-2 bg-morph-bg rounded-full overflow-hidden">
+                                    <motion.div
+                                        className="h-full bg-gradient-to-r from-morph-accent to-morph-secondary"
+                                        initial={{ width: "0%" }}
+                                        animate={{ width: "100%" }}
+                                        transition={{ duration: 4, ease: "linear" }}
+                                    />
+                                </div>
+                            </>
+                        )}
                     </motion.div>
                 )}
 
@@ -343,7 +440,61 @@ export default function DashboardPage() {
                 )}
             </div>
 
-            {/* Result */}
+            {/* V2 Result (SVG Preview) */}
+            <AnimatePresence>
+                {v2Result && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-bold font-[family-name:var(--font-space-grotesk)]">
+                                Your Banner
+                                <span className="ml-2 text-xs font-normal text-morph-secondary">
+                                    MorphV2
+                                </span>
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleGenerate}
+                                    disabled={isGenerating}
+                                    className="btn-secondary flex items-center gap-2 text-sm"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${isGenerating ? "animate-spin" : ""}`} />
+                                    Regenerate
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Download SVG as file
+                                        const blob = new Blob([v2Result.svg], { type: "image/svg+xml" });
+                                        const url = URL.createObjectURL(blob);
+                                        const link = document.createElement("a");
+                                        link.href = url;
+                                        link.download = `banner-${Date.now()}.svg`;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        URL.revokeObjectURL(url);
+                                    }}
+                                    className="btn-primary flex items-center gap-2"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Download SVG
+                                </button>
+                            </div>
+                        </div>
+
+                        <SVGPreview
+                            svg={v2Result.svg}
+                            verificationReport={v2Result.verificationReport}
+                            iterations={v2Result.iterations}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* V1 Result */}
             <AnimatePresence>
                 {result && (
                     <motion.div
