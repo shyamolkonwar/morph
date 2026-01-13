@@ -1,9 +1,10 @@
 """
 Design Refinement Agent
-Multi-agent iterative design generation with verification
+Multi-agent iterative design generation with verification and RAG
 """
 
 import re
+import time
 from typing import Optional
 from dataclasses import dataclass, field
 
@@ -29,15 +30,16 @@ class DesignGenerationError(Exception):
 
 class DesignRefinementAgent:
     """
-    Orchestrate multi-agent design refinement.
+    Orchestrate multi-agent design refinement with RAG.
     
     Pipeline:
-    1. GOD Prompt → LLM generates design spec
-    2. Extract Constraint Graph
-    3. Validate Constraint Graph
-    4. Generate SVG from spec
-    5. Run 5-layer verification
-    6. If failed: create refinement prompt and retry
+    1. RAG: Retrieve similar design patterns
+    2. GOD Prompt → LLM generates design spec with context
+    3. Extract Constraint Graph
+    4. Validate Constraint Graph
+    5. Generate SVG from spec
+    6. Run 5-layer verification
+    7. If failed: log to audit, create refinement prompt and retry
     """
     
     def __init__(
@@ -46,12 +48,16 @@ class DesignRefinementAgent:
         canvas_height: int = 630,
         brand_colors: Optional[list[str]] = None,
         max_iterations: int = 5,
+        enable_rag: bool = True,
+        generation_id: Optional[str] = None,
     ):
         self.settings = get_settings()
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
         self.brand_colors = brand_colors or ["#FF6B35", "#FFFFFF", "#004E89"]
         self.max_iterations = max_iterations
+        self.enable_rag = enable_rag
+        self.generation_id = generation_id
         
         self.verification_pipeline = VerificationPipeline(
             canvas_width=canvas_width,
@@ -62,25 +68,53 @@ class DesignRefinementAgent:
         
         self.history: list[GenerationHistory] = []
         self.iteration_count = 0
+        self.retrieved_patterns: list[str] = []
     
     async def generate(self, user_prompt: str) -> dict:
         """
-        Generate design with iterative refinement.
+        Generate design with iterative refinement and RAG.
         
         Returns:
             dict with svg, verification_report, iterations, constraint_graph
         """
         current_prompt = user_prompt
+        rag_context = ""
+        
+        # Step 0: RAG retrieval
+        if self.enable_rag:
+            try:
+                from app.services.vector_store import get_vector_store
+                vector_store = get_vector_store()
+                patterns = await vector_store.search_patterns(
+                    query=user_prompt,
+                    match_count=3,
+                    match_threshold=0.4,
+                )
+                
+                if patterns:
+                    self.retrieved_patterns = [p.id for p in patterns]
+                    rag_context = "\n\n[REFERENCE PATTERNS]\n"
+                    for i, p in enumerate(patterns, 1):
+                        rag_context += f"Pattern {i} ({p.category}, similarity: {p.similarity:.2f}):\n{p.content}\n\n"
+                    
+                    # Increment usage counts
+                    for p in patterns:
+                        await vector_store.increment_usage(p.id)
+            except Exception as e:
+                # RAG failure is non-fatal
+                print(f"RAG retrieval failed: {e}")
         
         for iteration in range(self.max_iterations):
             self.iteration_count = iteration
+            iteration_start = time.time()
+            svg_before = None
             
-            # Step 1: Build system prompt
+            # Step 1: Build system prompt with RAG context
             system_prompt = create_god_prompt(
                 canvas_width=self.canvas_width,
                 canvas_height=self.canvas_height,
                 brand_colors=self.brand_colors,
-                design_brief=current_prompt,
+                design_brief=current_prompt + rag_context,
             )
             
             # Step 2: Call LLM

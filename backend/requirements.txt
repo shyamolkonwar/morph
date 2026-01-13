@@ -18,9 +18,13 @@ svglib==1.5.1
 reportlab==4.2.5
 Pillow==11.0.0
 
+# Vector Store & Database
+supabase==2.10.0
+
 # Constraint Solving (Optional - for advanced layout)
 # ortools==9.11.4210
 
 # Utilities
 python-dotenv==1.0.1
 httpx==0.28.0
+

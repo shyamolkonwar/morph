@@ -1,0 +1,155 @@
+This document details the architecture and implementation logic for the **Layout Solver**, the core mathematical engine that ensures generated designs are structurally sound, overlap-free, and aesthetically balanced.
+
+This system acts as the "bridge" between the AI's creative intent (the Constraint Graph) and the final visual output (the Renderer).
+
+---
+
+# **Layout Solver Architecture**
+
+## **1. Design Philosophy**
+
+The Layout Solver treats design as a **Constraint Satisfaction Problem (CSP)**. Instead of placing elements at absolute coordinates (which leads to overlapping text and broken layouts), the system defines relationships between elements and calculates their optimal positions mathematically.
+
+* **Input:** A "Constraint Graph" (Logical definition of elements and relationships).
+* **Process:** Mathematical optimization using **Google OR-Tools**.
+* **Output:** A "Solved Layout" (Precise `x, y, width, height` coordinates for every element).
+
+---
+
+## **2. Graph Representation (The Data Structure)**
+
+We utilize **NetworkX (Python)** to manage the layout state as a directed graph. This abstraction allows us to validate connections before attempting to solve for coordinates.
+
+### **2.1. Nodes (Design Elements)**
+
+Every visual component in the banner is represented as a **Node** in the graph. Nodes are not pixels; they are data objects containing properties and variable domains.
+
+**Node Properties:**
+
+* **ID:** Unique identifier (e.g., `headline_1`, `cta_button`).
+* **Type:** Semantic role (e.g., `text`, `image`, `shape`, `container`).
+* **Dimensions:**
+* `min_width` / `max_width`: The element's compressibility (e.g., a logo has fixed aspect ratio; text can wrap).
+* `min_height` / `max_height`: Vertical flexibility.
+
+
+* **Anchor Point:** The reference point for positioning (e.g., Top-Left, Center).
+
+### **2.2. Edges (Constraints & Relationships)**
+
+Edges represent the **rules** that govern how two nodes interact. An edge exists between Node A and Node B if their positions are dependent.
+
+**Edge Types:**
+
+* **Spatial (Relative):**
+* `BELOW`: Node B must be visually below Node A.
+* `RIGHT_OF`: Node B must be to the right of Node A.
+
+
+* **Alignment:**
+* `ALIGN_LEFT`: Node A and Node B share the same X coordinate.
+* `ALIGN_CENTER_Y`: Node A and Node B share the same vertical center point.
+
+
+* **Containment:**
+* `INSIDE`: Node B must be strictly bounded by Node A (the container).
+
+
+* **Spacing:**
+* `MARGIN`: Defines the minimum pixel distance associated with the relationship (e.g., `BELOW` with `24px` margin).
+
+
+
+---
+
+## **3. Constraint Satisfaction Engine (Google OR-Tools)**
+
+The core logic uses **CP-SAT (Constraint Programming - Boolean Satisfiability)** solver from Google OR-Tools. This engine converts the graph relationships into algebraic inequalities to find a feasible solution.
+
+### **3.1. Variable Definition**
+
+For every Node  in the graph, the solver instantiates four integer variables:
+
+* : The x-coordinate (Domain:  to ).
+* : The y-coordinate (Domain:  to ).
+* : The width (Domain:  to ).
+* : The height (Domain:  to ).
+
+### **3.2. Constraint Implementation Logic**
+
+#### **A. Boundary Violations (The "Canvas" Rule)**
+
+* **Logic:** No element can extend beyond the canvas edges.
+* **Formula:**
+* 
+* 
+* 
+* 
+
+
+
+#### **B. Non-Overlap (The "Collision" Rule)**
+
+* **Logic:** For any two nodes  and  that are not explicitly stacked (like background images), their bounding boxes must not intersect.
+* **Formula:** The solver enforces that **at least one** of these conditions is true:
+*  (Left of)
+*  (Right of)
+*  (Above)
+*  (Below)
+
+
+
+#### **C. Relative Positioning (The "Flow" Rule)**
+
+* **Logic:** If Node B is `BELOW` Node A with padding .
+* **Formula:** 
+
+#### **D. Alignment (The "Grid" Rule)**
+
+* **Logic:** If Node B is `ALIGN_CENTER_X` with Node A.
+* **Formula:** 
+
+---
+
+## **4. Auto-Correction & Conflict Resolution**
+
+A key feature of this solver is its ability to handle **"Infeasible"** designs—where the AI requests something physically impossible (e.g., fitting 2000px of content into a 1000px banner).
+
+### **4.1. The Hierarchy of Constraints**
+
+Constraints are tagged with priorities to enable "Soft Logic."
+
+1. **Hard Constraints (Level 0):** Canvas boundaries, zero overlap. (Must never break).
+2. **Structural Constraints (Level 1):** Essential relationships (e.g., Headline must be above Body).
+3. **Aesthetic Constraints (Level 2):** Ideal padding, specific centering. (Can be broken if necessary).
+
+### **4.2. The Relaxation Loop (Auto-Correction Algorithm)**
+
+If the solver returns `INFEASIBLE`:
+
+1. **Diagnosis:** Identify the minimal set of conflicting constraints (e.g., Text Width + Padding > Canvas Width).
+2. **Relaxation:** The system drops the lowest priority constraints (Level 2) first.
+* *Example:* "I cannot maintain 80px padding and keep text inside the box. Reducing padding to 40px."
+
+
+3. **Retry:** Re-run the solver with the relaxed rules.
+4. **Fallback:** If Level 1 fails, the system triggers a **"Content Crunch"**:
+* Force reduction of Font Size (Variable  and  reduced).
+* Change Layout Mode (e.g., switch from Horizontal Row to Vertical Stack).
+
+
+
+---
+
+## **5. Integration Workflow**
+
+1. **Graph Ingestion:** The system receives the JSON Layout Tree from the LLM.
+2. **Graph Construction:** NetworkX builds the graph object, validating that all referenced Node IDs exist.
+3. **Solver Translation:** The Graph Walker iterates through nodes/edges and instantiates OR-Tools variables and inequalities.
+4. **Solving:** `solver.Solve()` is called with a strict timeout (e.g., 500ms).
+5. **Extraction:**
+* **Success:** Extract final integer values for  for all nodes.
+* **Failure:** Trigger Relaxation Loop.
+
+
+6. **Export:** Return a standardized `CalculatedLayout` JSON to the Rendering Engine.

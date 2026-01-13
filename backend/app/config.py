@@ -2,7 +2,8 @@
 Configuration Management for MorphV2 Backend
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import Optional
 from functools import lru_cache
 
@@ -29,16 +30,25 @@ class Settings(BaseSettings):
     default_canvas_width: int = 1200
     default_canvas_height: int = 630
     
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # CORS - accepts comma-separated string or JSON array
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS origins from comma-separated string"""
+        if not self.cors_origins:
+            return ["http://localhost:3000"]
+        return [origin.strip() for origin in self.cors_origins.split(",")]
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
+

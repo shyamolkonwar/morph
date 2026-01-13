@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api import generate, verify
+from app.api import generate, verify, patterns
 
 
 @asynccontextmanager
@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     print(f"   AI Provider: {settings.default_ai_provider}")
     print(f"   Max Iterations: {settings.max_iterations}")
+    print(f"   Vector Store: Supabase pgvector")
     yield
     print("👋 Shutting down MorphV2")
 
@@ -31,6 +32,7 @@ app = FastAPI(
     - **Constraint-Based Synthesis**: Mathematical layout validation
     - **5-Layer Verification**: Automated quality assurance
     - **Iterative Refinement**: Self-correcting design loop
+    - **RAG Pipeline**: Semantic pattern retrieval with pgvector
     """,
     version="2.0.0",
     lifespan=lifespan,
@@ -40,7 +42,7 @@ app = FastAPI(
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,6 +51,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(generate.router, prefix="/api/v1", tags=["generation"])
 app.include_router(verify.router, prefix="/api/v1", tags=["verification"])
+app.include_router(patterns.router, prefix="/api/v1", tags=["patterns"])
 
 
 @app.get("/")
