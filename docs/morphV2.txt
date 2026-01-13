@@ -1,0 +1,55 @@
+1. The Core Philosophy: "Constraint, Not Template"
+Instead of picking a pre-made design, the system follows this logic flow:
+Understand: Extract design intent (e.g., "Tech", "Minimal").
+Calculate: Compute the Golden Ratio, grid columns, and font scales mathmatically.
+Constrain: Define a "Constraint Graph" (e.g., "Headline must be above CTA", "Logo must be top-left").
+Solve: Use a logic solver (OR-Tools) to find the perfect pixel coordinates that satisfy those constraints.
+Render: Draw the result using code.
+2. The 5-Pillar Architecture
+Pillar 1: The First-Principles Design Engine (The "Brain")
+We replace simple prompting with a "GOD Prompt" architecture that splits the LLM into two distinct personas:
+System A (Creative Director): Handles aesthetics.
+Role: Decides "Use a split-complementary color scheme" or "Create tension with negative space."
+Output: High-level design specs (mood, hierarchy, tone).
+System B (Layout Engineer): Handles math.
+Role: Calculates specific pixel values. "Canvas width is 1200px, so the primary content area is 741px (Golden Ratio)."
+Output: A mathematical definition of the layout.
+Pillar 2: Constraint-Based Synthesis (The "Skeleton")
+The AI does not generate the image or SVG directly (which leads to hallucinations). It generates a Constraint Graph JSON.
+Nodes: The elements (Headline, Image, Button).
+Edges: The rules (Headline align_left with Logo; Button below Headline by 40px).
+Solver: A mathematical solver (Google OR-Tools) reads this JSON and calculates the exact x, y coordinates. If text overlaps, the solver "pushes" it down automatically.
+Pillar 3: High-Performance Rendering (The "Painter")
+We strictly use Skia Canvas (via Node.js) for rendering.
+Why Skia? It's the engine behind Chrome. It’s GPU-accelerated and pixel-perfect.
+Output: It takes the solver's coordinates and draws the design. It can export vector (SVG) for editing and raster (PNG) for social media.
+Pillar 4: Automated Verification Layer (The "QA Team")
+We assume the AI makes mistakes. We implement a 5-Layer Verification System that runs in milliseconds:
+Syntax: Is the SVG valid XML?
+Spatial: Do elements overlap? Are they inside the canvas bounds?
+Readability: Does the text contrast meet WCAG AA standards (4.5:1 ratio)?
+Palette: Did the AI use only the brand colors provided?
+Render: Does the final bitmap look correct (no blank pixels)?
+Pillar 5: Iterative Refinement Loop (The "Self-Correction")
+If the Verification Layer detects an error (e.g., "Text contrast too low"), it doesn't give up.
+Action: It sends the error back to the AI.
+Refinement: "Agent 3, your design failed contrast checks. Darken the background color and try again."
+Result: The system loops until the design is perfect, usually within 2-3 iterations.
+3. The Tech Stack
+LLM Backbone: Claude 3.5 Sonnet (Superior instruction following for design specs).
+Layout Solver: Google OR-Tools (To ensure no broken layouts).
+Renderer: Skia Canvas (Node.js bindings).
+Backend: FastAPI (Python) or Node.js (for Skia integration).
+Vector DB: Pinecone (To retrieve "Design Patterns" if needed, though less critical with first-principles).
+4. The "GOD Prompt" Strategy
+You will inject this system instruction into your LLM. It forces the AI to "show its work" before designing:
+
+"You are a Professional Design System with two integrated sub-systems: Creative Director and Layout Engineer."
+Instruction: "Do not use templates. Calculate spatial relationships using the Golden Ratio (1.618). Verify WCAG contrast compliance before outputting."
+Output Format:
+[ANALYSIS]: Show calculations (e.g., 1200px / 1.618 = 741px).
+[CONSTRAINT_GRAPH]: The JSON structure.
+[SVG_CODE]: The final code primitives.
+5. Summary of the Transformation
+Old Way: "Pick Template A -> Inject Text." (Rigid, boring).
+New Way: "Analyze Intent -> Calculate Math -> Solve Constraints -> Render." (Infinite variety, always unbroken).

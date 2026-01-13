@@ -1,0 +1,40 @@
+# MorphV2 Generative Banner System
+# Multi-service Docker Compose configuration
+
+version: '3.8'
+
+services:
+  # Python FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: morph-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=${DEBUG:-false}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEFAULT_AI_PROVIDER=${DEFAULT_AI_PROVIDER:-anthropic}
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend (optional - for full stack development)
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: morph-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - MORPH_BACKEND_URL=http://backend:8000
+  #   depends_on:
+  #     - backend
+  #   restart: unless-stopped

@@ -1,0 +1,26 @@
+# MorphV2 Generative Banner System - Python Backend
+# Core Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# AI Providers
+anthropic==0.40.0
+openai==1.57.0
+
+# Validation & Data
+pydantic==2.10.0
+pydantic-settings==2.6.0
+
+# SVG Processing & Rendering
+cairosvg==2.7.1
+svglib==1.5.1
+reportlab==4.2.5
+Pillow==11.0.0
+
+# Constraint Solving (Optional - for advanced layout)
+# ortools==9.11.4210
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.28.0
