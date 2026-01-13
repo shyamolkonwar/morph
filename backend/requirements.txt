@@ -21,10 +21,12 @@ Pillow==11.0.0
 # Vector Store & Database
 supabase==2.10.0
 
-# Constraint Solving (Optional - for advanced layout)
-# ortools==9.11.4210
+# Constraint Solving & Layout
+ortools==9.11.4210
+networkx==3.4.2
 
 # Utilities
 python-dotenv==1.0.1
 httpx==0.28.0
+
 
