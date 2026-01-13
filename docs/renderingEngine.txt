@@ -1,0 +1,76 @@
+Rendering Engine Architecture
+1. Design Philosophy
+The Rendering Engine follows a "Dual-Pipeline" Strategy to balance performance and flexibility.
+Pipeline A (Primary): Skia Canvas (Node.js). This is a low-level, GPU-accelerated path used for 95% of requests. It draws primitives (shapes, text, vectors) directly to a memory buffer. It is extremely fast (~15ms per image) and resource-efficient.
+Pipeline B (Fallback): Puppeteer (Headless Chrome). This is a high-level browser automation path. It is used only when the design requires complex CSS effects (e.g., advanced mesh gradients, backdrop-filters) that Skia cannot easily replicate native to the browser.
+2. Primary Renderer: Skia Canvas (Node.js)
+This component utilizes the Skia Graphics Library (the same engine powering Google Chrome, Android, and Flutter) via Node.js bindings (e.g., skia-canvas).
+
+2.1. The "Painter" Logic
+The renderer functions as a state machine that consumes the Solved Constraint Graph (or raw SVG). It translates abstract nodes into Skia drawing commands.
+Input Processing:
+The engine receives a "Render List" containing sorted layers (Background -> Shapes -> Images -> Text).
+It iterates through this list, matching each Element Type to a specific Painter Function.
+Drawing Primitives:
+Shapes: Converts abstract properties (e.g., "Rounded Rect with Linear Gradient") into Skia paths and shaders.
+Vectors: Parses SVG path data (d="M10 10 L50 50...") and renders them as resolution-independent curves.
+Images: Loads binary buffers (PNG/JPG) and draws them onto the canvas surface, applying transformations (scale, crop, rotate) as defined by the Solver.
+2.2. Advanced Typography Handling
+Unlike a browser, Skia does not have a "DOM". Text rendering must be manually managed to ensure professional quality.
+Font Registry:
+The system maintains a local cache of font files (.ttf, .otf).
+Logic: When the layout requests "Inter-Bold", the renderer loads the specific font buffer into Skia’s FontManager.
+Typesetting:
+The engine calculates glyph positions manually using Skia’s text shaping capabilities (often wrapping tools like HarfBuzz).
+It handles kerning, line-height, and paragraph wrapping based on the bounding box provided by the Layout Solver.
+2.3. Output & Optimization
+Formats: The canvas can instantly serialize its buffer to PNG, JPEG, WebP, or PDF (vector).
+Multi-Threading:
+Since Node.js is single-threaded, the Rendering Engine runs as a Worker Thread Pool.
+Batch Rendering: A "Render Queue" distributes jobs across available CPU cores. If 100 banners are requested, 4-8 workers render them in parallel.
+Caching:
+Expensive assets (like large background images or heavy font files) are cached in memory so they are not re-read from disk for every single generation.
+3. Secondary Renderer: Puppeteer (Headless Chrome)
+This pipeline is a complete "Virtual Browser" environment. It is heavier but allows for 100% web-standard compliance.
+
+3.1. Implementation Logic
+Environment: Launches a distinct Chrome instance in --headless mode.
+Injection:
+Instead of drawing commands, this renderer constructs a temporary HTML DOM.
+It injects the CSS Styles derived from the design intent directly into the page.
+Capture:
+The system waits for the networkidle event (ensuring all external assets like Pexels images are loaded).
+It triggers a page.screenshot() to capture the viewport.
+3.2. Use Cases for Fallback
+The system routes requests to Puppeteer only if the Design Specification includes flags such as:
+requires_css_grid (Complex layouts Skia might miss).
+requires_backdrop_filter (Glassmorphism effects).
+requires_mix_blend_mode (Advanced color blending).
+4. Data Interface (API Contract)
+To ensure the Rendering Engine is interchangeable, it strictly adheres to a defined Input/Output contract.
+
+4.1. Input: The Render Job Object
+The API accepts a JSON object containing:
+Canvas Config: width, height, pixel_density (e.g., 2x for Retina).
+Assets: URLs or Base64 strings for images/fonts.
+Layers: An ordered array of elements, where each object defines:
+type: (Text, Image, Rect, Path).
+coordinates: (x, y, w, h) - Calculated by the Solver.
+styles: (fill, stroke, shadow, opacity, corner_radius).
+content: (Text string or Image source).
+4.2. Output: The Asset Bundle
+The renderer returns:
+Binary Buffer: The raw image data (for direct upload to S3/Supabase).
+Metadata: Final dimensions, file size, and format.
+Render Logs: Execution time (used for performance monitoring).
+5. Integration Workflow
+Job Receipt: The Renderer receives a validated "Solved Layout" from the Layout Engine.
+Asset Pre-fetching:
+If the design uses external images (e.g., Pexels), the renderer fetches them immediately to convert to local buffers.
+If the design uses a specific font, it checks the local cache or fetches it.
+Pipeline Selection:
+Check: Does the design contain "Web-Only" CSS properties?
+No: Route to Skia Worker (Fast).
+Yes: Route to Puppeteer Queue (Slow).
+Execution: The selected engine draws the frame.
+Export: The buffer is returned to the main application for storage or user download.
