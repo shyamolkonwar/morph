@@ -1,0 +1,127 @@
+# **Verification Layer Architecture**
+
+## **1. Design Philosophy**
+
+The Verification Layer acts as a distinct **"Critic"** agent. It does not know *why* the AI made a design decision, only *if* that decision violates the laws of physics, accessibility, or brand guidelines.
+
+* **Input:** The Generated SVG Code and the original Design Specifications.
+* **Process:** A 5-stage sequential inspection pipeline.
+* **Output:** A `Pass/Fail` report with specific error messages (e.g., "Text 'Headline' overlaps with 'Logo' at x:400").
+
+---
+
+## **2. Layout Integrity Checks (Math Engine)**
+
+Before checking pixels, we check the **Geometry**. This is the fastest layer and catches 90% of layout errors.
+
+### **2.1. Boundary Violation Logic**
+
+* **Goal:** Ensure no element is clipped or placed outside the canvas.
+* **Implementation:**
+* Parse the SVG to extract the **Bounding Box** (`x, y, width, height`) of every element.
+* **The Check:** For every element , ensure:
+* 
+* 
+* 
+* 
+
+
+* **Failure:** If false, flag as "Out of Bounds".
+
+
+
+### **2.2. Overlap Detection Logic**
+
+* **Goal:** Prevent text from sitting on top of other text or crucial logos.
+* **Implementation:**
+* Utilize **AABB (Axis-Aligned Bounding Box)** collision detection.
+* **The Check:** Iterate through all pairs of elements. If `intersect(BoxA, BoxB)` is true:
+* *Exception:* If one element is a "Background" or "Container," overlap is allowed.
+* *Violation:* If both are "Text" or "Foreground," flag as "Illegal Overlap".
+
+
+
+
+
+---
+
+## **3. Text Readability Analysis (WCAG Engine)**
+
+This engine mathematically guarantees that text is legible, adhering to Web Content Accessibility Guidelines (WCAG).
+
+### **3.1. Contrast Verification**
+
+* **Goal:** Ensure text stands out against its background.
+* **Implementation:**
+1. **Extract Colors:** Parse the SVG to find the `fill` color of the text and the `fill` color of the shape directly behind it.
+2. **Calculate Luminance:** Convert Hex codes to **Relative Luminance** () using the sRGB spectral formula.
+3. **Compute Ratio:** Apply the standard formula: .
+4. **The Check:**
+* **Standard Text:** Ratio must be  (WCAG AA).
+* **Large Text:** Ratio must be .
+
+
+
+
+* **Failure:** Return error "Low Contrast (2.1:1)" to the AI for refinement.
+
+
+
+---
+
+## **4. HTML5/Skia Canvas (Pixel Inspection)**
+
+Sometimes syntax is correct, but the visual result is empty or corrupted. We use a **Headless Canvas** to inspect the actual rendered pixels.
+
+* **Technology:** **Skia Canvas** (Node.js) is used as the server-side implementation of the HTML5 Canvas API.
+
+### **4.1. The "Blank Canvas" Detector**
+
+* **Logic:** AI sometimes generates transparent or white-on-white designs.
+* **Implementation:**
+1. Render the SVG to a 1x1 pixel buffer or a small thumbnail.
+2. Analyze the **Alpha Channel** and **Color Histogram**.
+3. **The Check:** If >98% of pixels are a single color (e.g., pure white or transparent), flag as "Render Failure."
+
+
+
+### **4.2. Render Artifact Detection**
+
+* **Logic:** Detect sudden, jagged pixel noise indicative of a rendering engine crash or font corruption.
+* **Implementation:** Analyze pixel standard deviation. If variance is 0 (flat) or chaotic (noise), reject the design.
+
+---
+
+## **5. Computer Vision (OpenCV Engine)**
+
+For the highest level of quality, we give the system "eyes" using **OpenCV** (Python). This validates that the visual output matches the logical intent.
+
+### **5.1. Text Localization Verification**
+
+* **Goal:** Verify that text actually appears where the code says it should (detecting missing fonts or invisible rendering).
+* **Implementation:**
+1. **Render:** Convert the banner to a high-res Grayscale Bitmap.
+2. **Detect:** Run **MSER (Maximally Stable Extremal Regions)** or **EAST text detector** to find "text-like" regions in the image.
+3. **Compare:** Cross-reference the detected coordinates with the Layout Graph.
+4. **The Check:** If the graph says "Headline at (100,100)" but OpenCV finds "No Text Region" at that location, flag as "Missing Text/Font Error."
+
+
+
+### **5.2. Edge & Structure Detection**
+
+* **Goal:** Verify visual balance and structural integrity.
+* **Implementation:**
+1. **Process:** Apply a **Canny Edge Detector** to the bitmap.
+2. **Analyze:** Calculate the "Visual Center of Mass" based on edge density.
+3. **The Check:** If the center of mass is heavily skewed (e.g., all content in the bottom-right corner), flag as "Unbalanced Layout."
+
+
+
+---
+
+## **6. Integration: The Feedback Loop**
+
+This layer is not just a gatekeeper; it is a **Teacher**.
+
+* **If Validation Fails:** The system generates a structured error log (e.g., `{"error": "contrast_fail", "location": "headline", "current_value": 2.5, "required": 4.5}`).
+* **Action:** This log is fed back into the **"Layout Engineer"** AI agent, which treats it as a bug report and re-calculates the colors or positions to solve the specific error.
