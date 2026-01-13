@@ -1,0 +1,55 @@
+USER PROMPT       │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│         AGENT 1: DESIGN DIRECTOR (Claude)       │
+│   • Extracts intent                             │
+│   • Generates aesthetic direction               │
+│   • Produces constraint graph                   │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼ (Constraint Graph JSON)
+┌─────────────────────────────────────────────────┐
+│         AGENT 2: LAYOUT SOLVER (OR-Tools)       │
+│   • Validates constraints                       │
+│   • Detects infeasibility                       │
+│   • Suggests corrections                        │
+└──────────┬──────────────────────────────────────┘
+           │
+        Feasible? ─No─→ [Feedback to Agent 1]
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│         AGENT 3: SVG CODER (Claude)             │
+│   • Generates SVG from constraint graph         │
+│   • Applies design properties                   │
+│   • Optimizes for rendering                     │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼ (Raw SVG)
+┌─────────────────────────────────────────────────┐
+│         AGENT 4: VERIFIER (Python)              │
+│   • Runs all validation checks                  │
+│   • Identifies issues                           │
+│   • Generates specific feedback                 │
+└──────────┬──────────────────────────────────────┘
+           │
+        All checks pass? ─No─→ [Feedback to Agent 3]
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│         AGENT 5: RENDERER (Skia Canvas)         │
+│   • Renders to bitmap                           │
+│   • Exports multiple formats                    │
+│   • Generates thumbnails                        │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼
+        [DELIVERY]
+    Final Multi-Format Output
+     (PNG, SVG, WebP, PDF)

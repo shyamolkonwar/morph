@@ -1,0 +1,46 @@
+AI Model Layer Architecture
+1. Design Philosophy
+We utilize a Bi-Modal Intelligence Architecture. We do not ask one model to do everything. We split the workload based on cognitive strengths:
+The Architect (Primary LLM): Handles logic, math, reasoning, and code generation. It must be text-heavy and instruction-following dominant.
+The Observer (Vision Model): Handles visual perception. It looks at pixels (user uploads, reference images) and translates them into structured data (JSON) that the Architect can understand.
+2. Primary LLM: Claude 3.5 Sonnet (The Architect)
+We select Claude 3.5 Sonnet as the default "Architect" because research indicates it currently outperforms GPT-4 in coding and complex instruction following, which is critical for generating the Constraint Graphs and SVG code.
+
+2.1. Implementation Strategy
+Role:
+Intent Extraction: Converting "Make it pop" into "High Contrast, Saturation > 80%."
+First-Principles Calculation: Computing Golden Ratio, Grid Systems, and Padding.
+Graph Generation: outputting the JSON Constraint Graph.
+Configuration:
+Temperature: 0.2 (Low). We need deterministic math and valid JSON, not "creative writing."
+Output Format: Force JSON Mode (or XML tagging for Claude) to ensure the output parser never fails.
+Context Window Management: Although it supports 200k+ tokens, we optimize latency by injecting only the relevant RAG snippets (Design Patterns) for the specific request, keeping the input prompt lean (<5k tokens) for speed.
+2.2. Handling "Quantization" & Optimization
+Note on 4-bit Quantization: Since Claude 3.5 is a closed API model, we cannot manually quantize it to 4-bit.
+Optimization Alternative: We use Prompt Caching (if available) or Context Distillation. We instruct the model to be concise. For extreme cost savings on the "Verification Loop" (checking the work), we can swap to a smaller, faster model like Claude 3 Haiku or GPT-4o-mini which acts as the "4-bit optimized" equivalent for simple checking tasks.
+3. Vision-Language Model: GPT-4o (The Observer)
+We use GPT-4o for all visual tasks. Its "OMNI" capabilities allow it to reason about spatial relationships in images faster and more accurately than older models like LLaVA.
+
+3.1. Use Case A: Image-to-Layout (Reverse Engineering)
+Scenario: User uploads a screenshot of a banner they like and says, "Copy this layout style."
+Implementation:
+Input: Pass the image bytes to GPT-4o.
+System Prompt: "Analyze this image. Do not describe the content. Instead, extract the Constraint Graph. Identify the nodes (Headline, Image, Logo) and the spatial relationships (Headline is Center-Left, Logo is Top-Right). Return ONLY the JSON graph."
+Output: The "Architect" (Claude) takes this JSON and applies the user's new text/colors to that existing structure.
+3.2. Use Case B: Self-Correction (Visual QA)
+Scenario: The Validation Layer detects an anomaly that code can't find (e.g., "Does this look cluttered?").
+Implementation:
+Render: The system renders a low-res thumbnail of the generated banner.
+Verify: Send thumbnail to GPT-4o.
+Prompt: "Act as a Design Critic. Rate this banner 1-10 on 'Visual Balance'. If < 8, list specific coordinate changes needed to fix it."
+4. Integration Workflow (The Handshake)
+The two models talk to each other via Structured JSON. They never exchange natural language "chat," which reduces hallucination.
+User Input: "Make a banner like this image [Upload], but for a Medical Conference."
+Vision Step (GPT-4o):
+Input: [Image]
+Task: Extract Layout Topology.
+Output: {"layout_pattern": "split_screen_asymmetric", "text_position": "left_col"}
+Reasoning Step (Claude 3.5):
+Input: layout_pattern from GPT-4o + User Intent ("Medical Conference").
+Task: Calculate Golden Ratio for "Split Screen"; Select "Medical Blue" palette; Generate Constraint Graph.
+Output: Final JSON for the Solver.
