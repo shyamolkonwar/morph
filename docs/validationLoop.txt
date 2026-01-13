@@ -1,0 +1,53 @@
+Verification Workflow
+
+text
+SVG Generated
+     │
+     ▼
+┌─────────────────────────┐
+│ Syntax Validation       │ ◄── Check XML well-formedness
+└──────────┬──────────────┘
+           │
+        Pass? ─No─→ [REJECT] Return to LLM with error
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────┐
+│ Spatial Constraints     │ ◄── Check bounds, overlaps
+└──────────┬──────────────┘
+           │
+        Pass? ─No─→ [TRIGGER SOLVER] Auto-correct or reject
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────┐
+│ Text Readability        │ ◄── Check font size, contrast
+└──────────┬──────────────┘
+           │
+        Pass? ─No─→ [REFINEMENT] Ask LLM to fix text properties
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────┐
+│ Color Validation        │ ◄── Check palette adherence
+└──────────┬──────────────┘
+           │
+        Pass? ─No─→ [REFINEMENT] Replace unauthorized colors
+           │
+          Yes
+           │
+           ▼
+┌─────────────────────────┐
+│ Rendering Test          │ ◄── Render to bitmap, visual check
+└──────────┬──────────────┘
+           │
+        Pass? ─No─→ [REFINEMENT] Debug rendering issues
+           │
+          Yes
+           │
+           ▼
+        [ACCEPT]
+     Final Output
