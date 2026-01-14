@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api import generate, verify, patterns, jobs
+from app.api import generate, verify, patterns, jobs, projects
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ app.add_middleware(
 app.include_router(generate.router, prefix="/api/v1", tags=["generation"])
 app.include_router(verify.router, prefix="/api/v1", tags=["verification"])
 app.include_router(patterns.router, prefix="/api/v1", tags=["patterns"])
+app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
 app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 
 

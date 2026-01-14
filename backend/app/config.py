@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     # CORS - accepts comma-separated string or JSON array
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     
+    # Supabase Configuration
+    supabase_url: Optional[str] = None
+    supabase_service_role_key: Optional[str] = None
+    supabase_jwt_secret: Optional[str] = None
+    supabase_anon_key: Optional[str] = None
+    
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string"""

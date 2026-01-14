@@ -4,12 +4,14 @@ GET /api/v1/status/{job_id}
 POST /api/v1/generate-async
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 from celery.result import AsyncResult
 
 from celery_app import celery_app
+from app.dependencies.auth import get_current_user, CurrentUser
+from app.services.supabase_service import get_supabase_service
 
 
 router = APIRouter()
@@ -17,6 +19,7 @@ router = APIRouter()
 
 class AsyncGenerateRequest(BaseModel):
     """Request body for async banner generation"""
+    project_id: str = Field(..., description="Project ID to associate generation with")
     prompt: str = Field(..., min_length=5, max_length=1000, description="Design prompt")
     canvas_width: int = Field(default=1200, ge=100, le=4096)
     canvas_height: int = Field(default=630, ge=100, le=4096)
@@ -45,33 +48,58 @@ class JobStatusResponse(BaseModel):
 
 
 @router.post("/generate-async", response_model=AsyncGenerateResponse, status_code=202)
-async def generate_banner_async(request: AsyncGenerateRequest):
+async def generate_banner_async(
+    request: AsyncGenerateRequest,
+    user: CurrentUser = Depends(get_current_user)
+):
     """
     Fire and Forget: Enqueue banner generation job.
     
-    Returns 202 Accepted with job_id for status polling.
+    Requires authentication. Creates generation record and async job.
     
-    Pipeline runs asynchronously:
-    1. LLM reasoning (~10-15s)
-    2. Constraint solving (~1-2s)
-    3. Rendering (~2-5s)
+    Returns 202 Accepted with job_id for status polling.
     """
     from app.tasks.generation import orchestrate_design_generation
     from app.config import get_settings
     
     settings = get_settings()
+    supabase = get_supabase_service()
+    
+    # Verify project ownership
+    project = await supabase.get_project(request.project_id, user.user_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
     
     # Check for API key
     if settings.default_ai_provider == "openrouter" and not settings.openrouter_api_key:
         raise HTTPException(status_code=500, detail="OpenRouter API key not configured")
     
+    # Create generation record
+    generation = await supabase.create_generation(
+        project_id=request.project_id,
+        user_prompt=request.prompt,
+        canvas_width=request.canvas_width,
+        canvas_height=request.canvas_height,
+        brand_colors=request.brand_colors
+    )
+    
     # Enqueue the generation task
     task = orchestrate_design_generation.delay(
+        generation_id=generation["id"],
         user_prompt=request.prompt,
         brand_colors=request.brand_colors,
         canvas_width=request.canvas_width,
         canvas_height=request.canvas_height,
         max_iterations=request.max_iterations,
+    )
+    
+    # Create async job record
+    await supabase.create_async_job(
+        celery_task_id=task.id,
+        user_id=user.user_id,
+        task_name="orchestrate_design_generation",
+        input_params=request.dict(),
+        generation_id=generation["id"]
     )
     
     return AsyncGenerateResponse(
