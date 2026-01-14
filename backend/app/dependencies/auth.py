@@ -28,6 +28,8 @@ async def get_current_user(
     """
     Validate Supabase JWT and extract user information.
     
+    Supports both ECC (ES256) and legacy HS256 signing.
+    
     Usage:
         @app.get("/protected")
         async def protected_route(user: CurrentUser = Depends(get_current_user)):
@@ -47,13 +49,22 @@ async def get_current_user(
     token = credentials.credentials
     
     try:
-        # Decode and verify JWT
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False}  # Supabase doesn't use aud claim
-        )
+        # Try ES256 (ECC P-256) first - current Supabase default
+        try:
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["ES256"],
+                options={"verify_aud": False}
+            )
+        except (JWTError, Exception):
+            # Fallback to HS256 for legacy tokens
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False}
+            )
         
         # Extract user information
         user_id: str = payload.get("sub")
