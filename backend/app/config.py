@@ -16,12 +16,20 @@ class Settings(BaseSettings):
     app_version: str = "2.0.0"
     debug: bool = False
     
-    # AI Providers
+    # OpenRouter API (unified provider)
+    openrouter_api_key: Optional[str] = None
+    
+    # Legacy API keys (fallback)
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     
-    # Default AI Settings
-    default_ai_provider: str = "anthropic"  # "anthropic" or "openai"
+    # OpenRouter Models
+    architect_model: str = "anthropic/claude-sonnet-4"  # Primary reasoning
+    vision_model: str = "openai/gpt-4o"  # Vision tasks
+    verifier_model: str = "anthropic/claude-3-haiku"  # Fast verification
+    
+    # Legacy model settings (for backwards compatibility)
+    default_ai_provider: str = "openrouter"
     anthropic_model: str = "claude-3-5-sonnet-20241022"
     openai_model: str = "gpt-4o"
     

@@ -218,15 +218,38 @@ class DesignRefinementAgent:
         """Call the configured LLM provider"""
         provider = self.settings.default_ai_provider
         
-        if provider == "anthropic":
+        if provider == "openrouter":
+            return await self._call_openrouter(system_prompt, user_prompt)
+        elif provider == "anthropic":
             return await self._call_anthropic(system_prompt, user_prompt)
         elif provider == "openai":
             return await self._call_openai(system_prompt, user_prompt)
         else:
-            raise ValueError(f"Unknown AI provider: {provider}")
+            # Default to OpenRouter
+            return await self._call_openrouter(system_prompt, user_prompt)
+    
+    async def _call_openrouter(self, system_prompt: str, user_prompt: str) -> str:
+        """Call OpenRouter API (unified provider)"""
+        from app.providers.openrouter import OpenRouterProvider, OpenRouterConfig, ChatMessage
+        
+        config = OpenRouterConfig(
+            api_key=self.settings.openrouter_api_key,
+            architect_model=self.settings.architect_model,
+            temperature=0.2,  # Low for deterministic output
+        )
+        
+        provider = OpenRouterProvider(config)
+        
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_prompt),
+        ]
+        
+        response = await provider.chat(messages, max_tokens=8192)
+        return response.content
     
     async def _call_anthropic(self, system_prompt: str, user_prompt: str) -> str:
-        """Call Anthropic Claude API"""
+        """Call Anthropic Claude API (legacy fallback)"""
         import anthropic
         
         client = anthropic.AsyncAnthropic(api_key=self.settings.anthropic_api_key)
@@ -243,7 +266,7 @@ class DesignRefinementAgent:
         return message.content[0].text
     
     async def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
-        """Call OpenAI GPT API"""
+        """Call OpenAI GPT API (legacy fallback)"""
         from openai import AsyncOpenAI
         
         client = AsyncOpenAI(api_key=self.settings.openai_api_key)
