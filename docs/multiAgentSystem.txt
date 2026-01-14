@@ -1,0 +1,68 @@
+Multi-Agent Architecture (The Collaborative Loop)
+1. Design Philosophy
+We treat the generation process not as a "Function Call" but as a "Design Studio Workflow." In a real studio, a Creative Director sketches a concept, a Layout Engineer makes it fit, a Developer codes it, and a QA Tester breaks it. We replicate this exact human workflow using five distinct agents.
+The Orchestrator: A central state machine that passes messages between agents.
+The Loop: The process loops until the Verifier (Agent 4) gives a "Pass" signal or the "Max Iterations" limit is reached.
+2. The 5-Agent Roster
+Agent 1: The Design Director (Claude 3.5 Sonnet)
+Role: The "Visionary." It extracts intent and invents the aesthetic.
+Input: User Prompt + RAG Design Patterns.
+Logic:
+It does not calculate pixel coordinates.
+It defines relationships (e.g., "Headline centered", "Image right-half").
+Output: Constraint Graph (JSON). This is an abstract definition of the design, not the final code.
+Agent 2: The Layout Solver (Google OR-Tools)
+Role: The "Mathematician." It validates if the Director's vision is physically possible.
+Input: Constraint Graph (JSON).
+Logic:
+It attempts to solve the constraints (x, y, width, height).
+Feasibility Check: Can 50 words fit in a 200px box?
+Output:
+Success: A "Solved Graph" with specific coordinates.
+Failure: A "Conflict Report" (e.g., "Constraint Violation: Text overlaps Image bounds").
+Feedback Loop: If it fails, the report is sent back to Agent 1 with the instruction: "Your design is impossible. Simplify the text or change the layout.".
+Agent 3: The SVG Coder (Claude 3.5 Sonnet)
+Role: The "Frontend Developer." It translates the mathematical graph into rendering code.
+Input: The Solved Constraint Graph (JSON).
+Logic:
+It maps nodes to <rect>, <text>, and <path> SVG elements.
+It applies the "Design DNA" (colors, fonts, shadows) defined by Agent 1.
+Output: Raw SVG Code.
+Agent 4: The Verifier (Python/OpenCV)
+Role: The "QA Tester." It has the power to reject the design.
+Input: Raw SVG Code.
+Logic: Runs the 5-Layer Verification Pipeline (Syntax, Spatial, WCAG, Palette, Render).
+Output:
+Pass: Forward to Agent 5.
+Fail: An "Error Log" (e.g., {"error": "contrast_fail", "element": "headline"}).
+Feedback Loop: If it fails, the Error Log is sent back to Agent 3 with the instruction: "Fix the contrast ratio on the headline. Do not change the layout.".
+Agent 5: The Renderer (Skia Canvas)
+Role: The "Printer." It finalizes the asset.
+Input: Validated SVG Code.
+Logic: Executes the "Rendering Engine" pipeline (Skia or Puppeteer).
+Output: Final export formats (PNG, WebP, PDF) and thumbnails.
+3. The Orchestration Protocol
+The system is managed by a State Machine (Python/Celery) that controls the flow.
+
+3.1. The "Design Refinement" Loop
+This specific loop handles the collaboration between the Coder (Agent 3) and the Verifier (Agent 4).
+Iteration 0: Agent 3 generates Draft_v1.svg.
+Verification: Agent 4 runs checks.
+Result: FAIL (Error: "Text overlaps logo").
+Feedback Injection: The Orchestrator constructs a new prompt for Agent 3:
+"The previous generation failed verification. Error: Text overlaps logo. Please adjust the Y-coordinate of the text to fix this.".
+Iteration 1: Agent 3 generates Draft_v2.svg.
+Verification: Agent 4 runs checks.
+Result: PASS.
+Completion: The loop breaks, and data moves to Agent 5.
+3.2. Safety Limits
+To prevent infinite loops (and infinite API costs), the Orchestrator enforces strict limits:
+Max Iterations: 5 loops maximum.
+Diminishing Returns: If the error persists for 2 iterations, the Orchestrator instructs Agent 3 to take a "Safe Fallback" (e.g., "Remove the problematic element entirely").
+4. Data Flow Specification
+Step 1 (User -> Director): User Prompt
+Step 2 (Director -> Solver): JSON Constraint Graph (Abstract)
+Step 3 (Solver -> Coder): JSON Constraint Graph (Solved & Validated) OR Feedback to Director
+Step 4 (Coder -> Verifier): SVG Code
+Step 5 (Verifier -> Renderer): SVG Code (Verified) OR Error Log to Coder
+Step 6 (Renderer -> User): PNG URL
