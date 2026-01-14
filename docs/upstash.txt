@@ -1,0 +1,81 @@
+Queue System Architecture (Celery + Upstash)
+1. Design Philosophy
+The generation process (LLM reasoning → Constraint Solving → Rendering) takes 15-25 seconds. Keeping an HTTP connection open this long is fragile. We implement an Asynchronous Job Pattern:
+API: Accepts request → Pushes Job ID → Returns "202 Accepted".
+Broker (Upstash): Holds the job in a reliable, serverless queue.
+Worker (Celery): Picks up the job, executes the "First-Principles" pipeline, and updates the status.
+2. Infrastructure Configuration (Upstash Redis)
+Since Upstash is a serverless Redis provider, the connection logic differs slightly from a local instance (requiring SSL and strict connection management).
+
+2.1. The Broker URL Strategy
+Celery connects to Upstash using the rediss:// protocol (note the double s for SSL).
+Format: rediss://:<password>@<endpoint>:<port>?ssl_cert_reqs=CERT_NONE
+Implementation Note: You must explicitly disable strict certificate verification (CERT_NONE) or provide the CA bundle, as standard Celery SSL verification can sometimes fail with serverless providers depending on the environment.
+2.2. Optimized Configuration settings
+To match the "Production Scale" requirements, apply these settings to your Celery configuration:
+broker_pool_limit: Set to None. Upstash manages connections server-side; maintaining a static pool in Celery can lead to timeout errors in a serverless environment.
+task_acks_late: Set to True. If a worker crashes mid-render (e.g., Skia memory overflow), the job is not lost. It remains in Redis and is redelivered to another worker.
+worker_prefetch_multiplier: Set to 1. Since your tasks are heavy (15s+), do not let a worker "hoard" tasks. It should fetch exactly one, finish it, then fetch the next.
+3. Task Definition & Granularity
+We break the "Generative Banner System" into specific Celery tasks corresponding to your architecture layers.
+
+3.1. Primary Task: orchestrate_design_generation
+This is the "Parent Task" that manages the entire lifecycle.
+Input: user_prompt, brand_colors, canvas_dimensions.
+Logic:
+Calls LLM Service (Claude 3.5) with the "GOD Prompt".
+Receives the Constraint Graph.
+Calls Layout Solver (OR-Tools) to validate positions.
+Calls Renderer (Skia) to generate the asset.
+Saves the result to the Database.
+Why Monolithic? Passing massive JSON graphs between multiple small chained tasks increases Redis latency. A single Orchestrator task that calls internal functions is more performant for this specific use case.
+3.2. Secondary Task: iterative_refinement_loop
+Trigger: Called if the orchestrate_design_generation fails validation checks.
+Logic:
+Takes the failed SVG and Error Report.
+Re-prompts the LLM (Agentic feedback).
+Re-runs the Solver and Renderer.
+Updates the existing Job ID with the new version.
+4. Worker Architecture (The Compute Layer)
+You need distinct worker queues to handle different types of loads efficiently.
+
+4.1. The "CPU-Bound" Queue (Solver & Render)
+Role: Runs Skia Canvas and OR-Tools.
+Concurrency: Process-based (prefork).
+Scaling: 1 Worker Process per CPU Core.
+Note: Skia is multi-threaded, but running it in parallel Celery processes maximizes throughput.
+4.2. The "I/O-Bound" Queue (LLM Calls)
+Role: Waits for Claude 3.5 / GPT-4o API responses.
+Concurrency: Thread-based (gevent or eventlet).
+Scaling: High concurrency (e.g., 100 threads).
+Why: These tasks spend 90% of their time waiting for the API. You don't need a full CPU core for that.
+5. API Integration Workflow
+5.1. The "Fire and Forget" Endpoint
+When the user hits POST /api/v1/generate:
+Validation: API validates input schema.
+Enqueue: API pushes orchestrate_design_generation to Upstash.
+Response: Returns HTTP 202 and a job_id.
+JSON
+{
+  "job_id": "550e8400-e29b-...",
+  "status_url": "/api/v1/status/550e8400-..."
+}
+5.2. The Status Polling Endpoint
+When the user polls GET /api/v1/status/{job_id}:
+Lookup: API checks AsyncResult(job_id) in Celery.
+States:
+PENDING: In Upstash, waiting for worker.
+STARTED: Worker is currently generating/solving.
+SUCCESS: Rendering complete. Returns S3/Supabase URL of the banner.
+FAILURE: Returns the "Verification Error" log (e.g., "Text contrast failed").
+6. Reliability & Failure Management
+6.1. Handling LLM Timeouts
+Problem: Claude 3.5 takes >30s to generate a complex graph.
+Solution: Set soft_time_limit=60s and time_limit=120s on the task. If the LLM hangs, Celery kills the task gracefully and retries.
+6.2. Handling Rate Limits
+Problem: Hitting the TPM (Tokens Per Minute) limit on Anthropic/OpenAI.
+Solution: Configure Automatic Retries with exponential backoff.
+Config: autoretry_for=(RateLimitError,), retry_backoff=True.
+6.3. Upstash Connection Resilience
+Problem: Serverless connections can drop silently.
+Solution: Implement a "Heartbeat" setting in Celery (broker_heartbeat=10) to ensure the worker maintains an active link to Upstash.

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api import generate, verify, patterns
+from app.api import generate, verify, patterns, jobs
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ app.add_middleware(
 app.include_router(generate.router, prefix="/api/v1", tags=["generation"])
 app.include_router(verify.router, prefix="/api/v1", tags=["verification"])
 app.include_router(patterns.router, prefix="/api/v1", tags=["patterns"])
+app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 
 
 @app.get("/")
@@ -72,6 +73,8 @@ async def health():
         "status": "healthy",
         "version": settings.app_version,
         "ai_provider": settings.default_ai_provider,
+        "has_openrouter_key": bool(settings.openrouter_api_key),
         "has_anthropic_key": bool(settings.anthropic_api_key),
         "has_openai_key": bool(settings.openai_api_key),
+        "queue": "Celery + Upstash Redis",
     }
