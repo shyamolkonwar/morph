@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client';
 
 // Get backend URL from environment or default to localhost
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -24,7 +24,7 @@ export function createApiClient(): AxiosInstance {
     client.interceptors.request.use(
         async (config) => {
             try {
-                const supabase = createClientComponentClient();
+                const supabase = createClient();
                 const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.access_token) {

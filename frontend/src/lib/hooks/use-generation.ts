@@ -81,8 +81,9 @@ export function useJobStatus(
         queryKey: ['jobs', jobId],
         queryFn: () => api.generation.getJobStatus(jobId!),
         enabled: !!jobId,
-        refetchInterval: (data) => {
+        refetchInterval: (query) => {
             // Stop polling if job is completed
+            const data = query.state.data;
             if (data?.status === 'SUCCESS' || data?.status === 'FAILURE' || data?.status === 'CANCELLED') {
                 return false;
             }
