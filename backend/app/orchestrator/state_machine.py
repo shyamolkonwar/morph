@@ -144,6 +144,42 @@ class DesignOrchestrator:
             # ═══════════════════════════════════════════════════════════════
             render_result = await self._run_renderer(verified_svg)
             
+            # ═══════════════════════════════════════════════════════════════
+            # AUTO-LEARN: Store successful design pattern in vector database
+            # ═══════════════════════════════════════════════════════════════
+            try:
+                from app.services.vector_store import get_vector_store
+                import json
+                
+                vector_store = get_vector_store()
+                
+                pattern_content = json.dumps({
+                    "prompt": user_prompt,
+                    "constraint_graph": constraint_graph,
+                    "canvas": {
+                        "width": self.canvas_width,
+                        "height": self.canvas_height
+                    },
+                    "brand_colors": self.brand_colors,
+                    "director_iterations": self.director_iterations,
+                    "coder_iterations": self.coder_iterations,
+                })
+                
+                await vector_store.store_pattern(
+                    content=pattern_content,
+                    category="auto_learned",
+                    metadata={
+                        "verified": True,
+                        "director_iterations": self.director_iterations,
+                        "coder_iterations": self.coder_iterations,
+                        "prompt_length": len(user_prompt),
+                    },
+                    source="orchestrator",
+                )
+            except Exception as e:
+                # Non-fatal
+                print(f"Auto-learn pattern storage failed: {e}")
+            
             return OrchestratorResult(
                 success=True,
                 svg=verified_svg,

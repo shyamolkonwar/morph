@@ -172,12 +172,49 @@ class DesignRefinementAgent:
             
             # If all checks pass, return result
             if verification_report.overall == VerificationResult.PASS:
+                # ═══════════════════════════════════════════════════════════
+                # AUTO-LEARN: Store successful pattern in vector database
+                # ═══════════════════════════════════════════════════════════
+                try:
+                    from app.services.vector_store import get_vector_store
+                    import json
+                    
+                    vector_store = get_vector_store()
+                    
+                    # Create pattern content from the successful generation
+                    pattern_content = json.dumps({
+                        "prompt": user_prompt,
+                        "constraint_graph": constraint_graph_text,
+                        "canvas": {
+                            "width": self.canvas_width,
+                            "height": self.canvas_height
+                        },
+                        "brand_colors": self.brand_colors,
+                        "iterations_needed": iteration + 1,
+                    })
+                    
+                    await vector_store.store_pattern(
+                        content=pattern_content,
+                        category="auto_learned",
+                        metadata={
+                            "generation_id": self.generation_id,
+                            "iterations": iteration + 1,
+                            "verified": True,
+                            "prompt_length": len(user_prompt),
+                        },
+                        source="generated",
+                    )
+                except Exception as e:
+                    # Non-fatal: log but don't fail the generation
+                    print(f"Auto-learn pattern storage failed: {e}")
+                
                 return {
                     "svg": svg_code,
                     "verification_report": verification_report.to_dict(),
                     "iterations": iteration + 1,
                     "constraint_graph": constraint_graph_text,
                     "analysis": analysis,
+                    "auto_learned": True,
                 }
             
             # Create refinement prompt with failed layers

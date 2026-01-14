@@ -56,6 +56,31 @@ class DesignDirectorAgent(BaseAgent):
         
         settings = get_settings()
         
+        if rag_patterns is None:
+            # Check if we should retrieve patterns
+            try:
+                from app.services.vector_store import get_vector_store
+                vector_store = get_vector_store()
+                found_patterns = await vector_store.search_patterns(
+                    query=user_prompt,
+                    match_count=3,
+                    match_threshold=0.4,
+                )
+                if found_patterns:
+                    rag_patterns = [
+                        {
+                            "name": p.category or "Pattern",
+                            "description": p.content,
+                            "similarity": p.similarity
+                        }
+                        for p in found_patterns
+                    ]
+                    # Increment usage
+                    for p in found_patterns:
+                        await vector_store.increment_usage(p.id)
+            except Exception as e:
+                print(f"RAG retrieval warning: {e}")
+
         system_prompt = self._get_system_prompt(feedback)
         user_message = self._build_user_message(user_prompt, rag_patterns)
         
